@@ -131,6 +131,40 @@ add("K_bptt8_T32", {"n_loops": 32, "bptt_last_k": 8})
 add("K_bptt8_T64", {"n_loops": 64, "bptt_last_k": 8})
 add("K_bptt4_T64", {"n_loops": 64, "bptt_last_k": 4})
 
+# --- P. the depth-RoPE frontier ---------------------------------------------
+# First mechanism to beat the naive optimum: at T=16, rotating a fraction of the
+# channels by a step-dependent angle gives 4.1612 at frac=0.25 and 4.1405 at
+# frac=0.5, against 4.2346 for the plain T=16 loop and 4.2028 for the best naive
+# depth (T=8).  Zero learned parameters -- and the *learned* versions of the same
+# idea (per-step embedding 4.2663, per-step adaLN 4.2634) both HURT, so what helps
+# is breaking the symmetry between steps structurally, not adding capacity.
+# More rotation was better than less, so the fraction and the angle scale are the
+# axes to push, and the payoff should be largest exactly where naive looping fails.
+for _f in (0.75, 1.0):
+    add(f"P_drope_f{_f}_T16", {"depth_cond": "depth_rope", "depth_rope_frac": _f})
+for _f in (0.25, 0.5, 1.0):
+    add(f"P_drope_f{_f}_T32", {"n_loops": 32, "depth_cond": "depth_rope",
+                               "depth_rope_frac": _f})
+add("P_drope_f0.5_T64", {"n_loops": 64, "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
+add("P_drope_f0.5_T8", {"n_loops": 8, "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
+# the angle scale: theta controls how fast the frame turns per step
+add("P_drope_theta100_T32", {"n_loops": 32, "depth_cond": "depth_rope",
+                             "depth_rope_frac": 0.5, "depth_rope_theta": 100.0})
+add("P_drope_theta10k_T32", {"n_loops": 32, "depth_cond": "depth_rope",
+                             "depth_rope_frac": 0.5, "depth_rope_theta": 10000.0})
+# does it compose with the mechanisms that fix the trajectory geometry?
+add("P_drope_orthosphere", {"n_loops": 32, "depth_cond": "depth_rope",
+                            "depth_rope_frac": 0.5, "update": "orthogonal_sphere"})
+add("P_drope_geodesic", {"n_loops": 32, "depth_cond": "depth_rope",
+                         "depth_rope_frac": 0.5, "update": "geodesic"})
+add("P_drope_pool", {"n_loops": 32, "depth_cond": "depth_rope", "depth_rope_frac": 0.5,
+                     "readout": "pool_gate"})
+add("P_drope_chains", {"n_chains": 4, "n_loops": 8, "depth_cond": "depth_rope",
+                       "depth_rope_frac": 0.5})
+# and does it let the model extrapolate past its training depth?
+add("P_drope_uniform", {"loop_sampling": "uniform", "loop_min": 1, "n_loops": 32,
+                        "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
+
 # --- N. the state does not have to live in a flat space ---------------------
 # The residual stream is a flat vector space and the update is addition, which is
 # precisely what degenerates into a straight-line drift.  These change the geometry

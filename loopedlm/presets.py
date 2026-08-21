@@ -245,9 +245,13 @@ def estimate_minutes(model_cfg: Dict, tokens: int, tok_s_ref: float = TOK_S_REF)
     T = model_cfg.get("n_loops", 16)
     if model_cfg.get("loop_sampling") == "uniform":
         T = (model_cfg.get("loop_min", 1) + T) / 2
-    layers = T * model_cfg.get("n_core", 2) + model_cfg.get("n_prelude", 0) + model_cfg.get("n_coda", 0)
+    nc = model_cfg.get("n_core", 2)
+    # Parallel chains multiply the looped work; without this a 4-chain config was
+    # estimated at a quarter of its real cost and the queue plan under-reported.
+    chains = model_cfg.get("n_chains", 1)
+    layers = T * nc * chains + model_cfg.get("n_prelude", 0) + model_cfg.get("n_coda", 0)
     if model_cfg.get("bptt_last_k"):
         k = min(model_cfg["bptt_last_k"], T)
-        layers = (k * model_cfg.get("n_core", 2) * 1.0 + (T - k) * model_cfg.get("n_core", 2) * 0.25)
+        layers = (k * nc + (T - k) * nc * 0.25) * chains
     rate = tok_s_ref * REF_LAYERS / max(layers, 1)
     return tokens / rate / 60 * 1.25 + 5

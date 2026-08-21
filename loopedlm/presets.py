@@ -131,6 +131,17 @@ add("K_bptt8_T32", {"n_loops": 32, "bptt_last_k": 8})
 add("K_bptt8_T64", {"n_loops": 64, "bptt_last_k": 8})
 add("K_bptt4_T64", {"n_loops": 64, "bptt_last_k": 4})
 
+# --- M. a second model size, to make the scaling claim a measurement --------
+# Every other result comes from one model size, so any statement about scaling is
+# an argument about asymptotic cost rather than an observed trend.  This repeats
+# the saturation curve at ~3.5M parameters (d_model 256, same recipe, same token
+# budget).  The question is whether the useful depth moves with model size: if the
+# optimum stays at T=8 in both, the ceiling is a property of the data and the
+# recipe, not of capacity -- which is a result either way.
+_SMALL = dict(d_model=256, n_heads=4, head_dim=64, n_kv_heads=1, intermediate_size=704)
+for _t in (2, 4, 8, 16, 32):
+    add(f"M_small_T{_t}", dict(_SMALL, n_loops=_t))
+
 # --- L. combinations suggested by the measured failure mode -----------------
 # Diagnosis on A_depth16: updates do NOT decay (RMS ~1.13, no fixed point) but
 # become collinear -- cos(delta_t, delta_{t-1}) reaches 0.999 by t=16 -- while the

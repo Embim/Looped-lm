@@ -38,7 +38,13 @@ def _pick_steps(n_states: int, cfg: ModelConfig, gen: torch.Generator) -> List[i
     k = min(cfg.deep_sup_k, len(cand))
     if k <= 0:
         return []
-    idx = torch.randperm(len(cand), generator=gen).tolist()[:k]
+    # randperm without an explicit device builds a CPU tensor, which raises
+    # "Expected a 'cpu' device type for generator but found 'cuda'" when the
+    # generator is a CUDA one.  The Windows test suite runs on CPU, so this path
+    # was never exercised there and would have failed on the first GPU run of
+    # every deep-supervision config.
+    dev = gen.device if gen is not None else torch.device("cpu")
+    idx = torch.randperm(len(cand), generator=gen, device=dev).tolist()[:k]
     return sorted(cand[i] for i in idx)
 
 

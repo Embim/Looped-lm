@@ -27,6 +27,12 @@ from loopedlm.losses import compute_loss                  # noqa: E402
 from loopedlm.model import LoopedQwen3                     # noqa: E402
 from loopedlm.presets import P, resolve                    # noqa: E402
 
+# This suite runs torch on CPU, which by default grabs every core.  On a box with
+# 252 cores that starved the dispatch thread of a concurrent GPU run and slowed it
+# 9x -- the looped model is launch-bound, so it is sensitive to CPU contention,
+# not just to GPU contention.
+torch.set_num_threads(min(8, torch.get_num_threads()))
+
 FAILED: list[str] = []
 
 

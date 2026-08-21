@@ -49,6 +49,18 @@ def board(*args, timeout: int = 60) -> int:
         return 0
 
 
+def _current_machine() -> tuple[str, bool]:
+    try:
+        import torch
+        gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
+    except Exception:
+        gpu = "unknown"
+    return gpu, os.environ.get("LOOPEDLM_COMPILE", "0") == "1"
+
+
+CUR_GPU, CUR_COMPILED = _current_machine()
+
+
 def est(name: str, tokens: int, tok_s: float) -> float:
     return estimate_minutes(resolve(name)[0], tokens, tok_s)
 
@@ -97,9 +109,24 @@ def main():
         run_name = name + a.suffix
         res_file = RESULTS / f"{run_name}.json"
         if res_file.exists() and not a.force:
-            print(f"\n[{i}/{len(queue)}] {run_name}: already done, skipping", flush=True)
-            done.append(run_name)
-            continue
+            # Skip only a result produced by *this* machine and this compile mode.
+            # A result carried over from another GPU silently entered a table it
+            # does not belong in: the numbers are not comparable across builds, and
+            # the skip made a stale Windows run look like a fresh A100 one.
+            prev = {}
+            try:
+                prev = json.loads(res_file.read_text()).get("machine") or {}
+            except Exception:
+                pass
+            same = (prev.get("gpu") == CUR_GPU and bool(prev.get("compiled")) == CUR_COMPILED)
+            if same:
+                print(f"\n[{i}/{len(queue)}] {run_name}: already done here, skipping", flush=True)
+                done.append(run_name)
+                continue
+            print(f"\n[{i}/{len(queue)}] {run_name}: existing result is from "
+                  f"{prev.get('gpu', 'an unrecorded machine')} "
+                  f"(compiled={prev.get('compiled')}), re-running on {CUR_GPU}", flush=True)
+            res_file.rename(res_file.with_suffix(".json.other-machine"))
 
         e = est(name, a.tokens or resolve(name)[1]["total_tokens"], a.tok_s)
         print(f"\n[{i}/{len(queue)}] {run_name}  (~{e:.0f} min)", flush=True)

@@ -105,10 +105,11 @@ class ModelConfig:
         return cls(**d)
 
 
-# Paths come from the environment so the same code runs unchanged on the Windows
-# box and on a rented Linux GPU.
+# Paths and block compilation come from the environment so the same code runs
+# unchanged on the Windows box (no Triton, so no compile) and on a Linux GPU.
 _OUT_DIR = os.environ.get("LOOPEDLM_OUT", r"C:\ml\looped-lm\runs")
 _DATA_DIR = os.environ.get("LOOPEDLM_DATA", r"C:\ml\looped-lm\data\tok8192")
+_COMPILE = os.environ.get("LOOPEDLM_COMPILE", "0") == "1"
 
 
 @dataclass
@@ -136,7 +137,7 @@ class TrainConfig:
     param_budget: int = 10_000_000
     seed: int = 1337
     dtype: str = "bfloat16"
-    compile: bool = False
+    compile: bool = _COMPILE
 
     eval_every: int = 500
     eval_tokens: int = 2_000_000      # tokens used for periodic validation

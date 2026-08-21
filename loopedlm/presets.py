@@ -201,6 +201,28 @@ add("Y_stack_T64", {"n_loops": 64, "transport": "rotate", "carrier_dim": 128})
 add("Y_stack_drope_T32", {"n_loops": 32, "transport": "rotate", "carrier_dim": 128,
                           "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
 
+# --- Z. combinations of the mechanisms that individually beat the bar -------
+# Three cleared 4.2028 at 25M tokens: depth-RoPE 0.5 (4.1405), depth-RoPE 0.25
+# (4.1612), constant-share injection (4.1928).  They act on different parts of the
+# loop -- step symmetry vs the input's share of the block input -- so they should
+# compose; these are the candidates for seeds and the 100M finals.
+add("Z_drope_rel_T16", {"depth_cond": "depth_rope", "depth_rope_frac": 0.5,
+                        "inject_input": "add_relative"})
+add("Z_drope_rel_T32", {"n_loops": 32, "depth_cond": "depth_rope", "depth_rope_frac": 0.5,
+                        "inject_input": "add_relative"})
+add("Z_drope_rel_T64", {"n_loops": 64, "depth_cond": "depth_rope", "depth_rope_frac": 0.5,
+                        "inject_input": "add_relative"})
+add("Z_drope_rel_exit_T32", {"n_loops": 32, "depth_cond": "depth_rope",
+                             "depth_rope_frac": 0.5, "inject_input": "add_relative",
+                             "token_exit_thresh": 0.03, "token_exit_min_t": 4})
+add("Z_rotate_rel_T32", {"n_loops": 32, "transport": "rotate",
+                         "inject_input": "add_relative"})
+add("Z_stack_rel_T32", {"n_loops": 32, "transport": "rotate", "carrier_dim": 128,
+                        "inject_input": "add_relative"})
+add("Z_drope_rel_uniform", {"loop_sampling": "uniform", "loop_min": 1, "n_loops": 32,
+                            "depth_cond": "depth_rope", "depth_rope_frac": 0.5,
+                            "inject_input": "add_relative"})
+
 # --- P. the depth-RoPE frontier ---------------------------------------------
 # First mechanism to beat the naive optimum: at T=16, rotating a fraction of the
 # channels by a step-dependent angle gives 4.1612 at frac=0.25 and 4.1405 at

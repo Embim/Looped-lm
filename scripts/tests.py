@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import shutil
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -254,6 +255,122 @@ def test_deep_sup_changes_gradients(device):
     check("deep supervision changes the gradient", rel > 1e-3, f"rel diff={rel:.2e}")
 
 
+def test_early_exit_synthetic():
+    """Exit-step selection and the reported averages, on a case computed by hand."""
+    from loopedlm.eval import early_exit
+    T, bpt = 4, 4.0
+    # nll[t, i]: rows are read-out steps 0..T, columns are three tokens
+    nll = np.array([
+        [9.0, 9.0, 9.0],      # t=0, never an exit candidate
+        [1.0, 5.0, 5.0],      # t=1
+        [2.0, 4.0, 4.0],      # t=2
+        [3.0, 0.5, 3.0],      # t=3
+        [4.0, 0.6, 2.0],      # t=4
+    ])
+    conf = np.array([
+        [0.0, 0.0, 0.0],
+        [0.9, 0.10, 0.1],     # token 0 passes 0.8 at t=1
+        [0.9, 0.20, 0.2],
+        [0.9, 0.95, 0.3],     # token 1 passes at t=3
+        [0.9, 0.99, 0.4],     # token 2 never passes -> forced to t=T
+    ])
+    r = early_exit(nll, conf, "ge", [0.8], bpt)[0]
+    want_steps = [1, 3, 4]
+    want_loss = (1.0 + 0.5 + 2.0) / 3
+    check("early exit picks the first passing step",
+          abs(r["avg_loops"] - float(np.mean(want_steps))) < 1e-9
+          and abs(r["loss"] - want_loss) < 1e-9,
+          f"avg_loops={r['avg_loops']:.3f} (want {np.mean(want_steps):.3f}), "
+          f"loss={r['loss']:.4f} (want {want_loss:.4f})")
+    check("tokens that never pass are charged full depth",
+          abs(r["frac_max_depth"] - 1 / 3) < 1e-9, f"frac_max_depth={r['frac_max_depth']:.3f}")
+
+    # An unreachable threshold must reproduce the fixed-depth-T result exactly:
+    # this is the anchor that ties the early-exit curve to the depth sweep.
+    r2 = early_exit(nll, conf, "ge", [1.01], bpt)[0]
+    check("unreachable threshold == fixed depth T",
+          abs(r2["loss"] - nll[T].mean()) < 1e-12 and r2["avg_loops"] == T,
+          f"loss={r2['loss']:.4f} vs nll[T].mean()={nll[T].mean():.4f}")
+
+    # 'le' mode (KL stability): exit when the prediction stops moving
+    kl = np.array([[0., 0., 0.], [0.5, 0.5, 0.5], [0.01, 0.5, 0.5],
+                   [0.5, 0.005, 0.5], [0.5, 0.5, 0.5]])
+    r3 = early_exit(nll, kl, "le", [0.02], bpt)[0]
+    check("le-mode exit uses the first step below the threshold",
+          abs(r3["avg_loops"] - np.mean([2, 3, 4])) < 1e-9,
+          f"avg_loops={r3['avg_loops']:.3f} (want {np.mean([2,3,4]):.3f})")
+    check("monotone thresholds give monotone compute",
+          [x["avg_loops"] for x in early_exit(nll, conf, "ge", [0.05, 0.5, 0.95, 1.01], bpt)]
+          == sorted(x["avg_loops"] for x in early_exit(nll, conf, "ge", [0.05, 0.5, 0.95, 1.01], bpt)))
+
+
+def test_strata_selection_bias():
+    """The stratification must not manufacture a depth effect out of pure noise.
+
+    With nll drawn i.i.d. per step there is no real gain from depth.  Ranking
+    tokens by their own final-step loss still produces an apparent improvement
+    (the selected final point is inflated by construction); ranking by an
+    independent array must not.  This is why the report never relies on a single
+    stratification.
+    """
+    from loopedlm.eval import difficulty_strata
+    rng = np.random.default_rng(0)
+    T, N = 8, 40000
+    nll = rng.gamma(2.0, 2.0, size=(T + 1, N))       # no depth structure at all
+    indep = rng.gamma(2.0, 2.0, size=N)
+
+    by_final = difficulty_strata(nll, rank_by=nll[-1])["top5pct_hardest"]["loss"]
+    drop_final = by_final[1] - by_final[-1]
+    by_step1 = difficulty_strata(nll)["top5pct_hardest"]["loss"]
+    drop_step1 = by_step1[1] - by_step1[-1]
+    by_indep = difficulty_strata(nll, rank_by=indep)["top5pct_hardest"]["loss"]
+    drop_indep = abs(by_indep[1] - by_indep[-1])
+    scale = nll.mean()
+
+    check("ranking by the final step manufactures a spurious depth gain",
+          drop_final < -0.5, f"apparent change t1->tT = {drop_final:+.3f} nats (should be strongly negative)")
+    check("ranking by step 1 manufactures the opposite spurious gain",
+          drop_step1 > 0.5, f"apparent change t1->tT = {drop_step1:+.3f} nats")
+    check("ranking by an independent model shows no spurious gain",
+          drop_indep < 0.1 * scale, f"|change| = {drop_indep:.3f} nats, mean nll = {scale:.2f}")
+
+
+def test_analysis_pipeline(device):
+    """full_report end to end on an untrained tiny model: shapes, keys, consistency."""
+    from loopedlm.eval import full_report
+    try:
+        meta = load_meta(TrainConfig.data_dir)
+    except Exception:
+        check("analysis pipeline", False, "no prepared data; skipping")
+        return
+    mc = small(vocab_size=meta["vocab_size"], n_loops=3, max_loops=4, max_seq_len=64,
+               halting="ponder")
+    m = LoopedQwen3(mc)
+    tmp = Path(TrainConfig.out_dir) / "_pipeline_test"
+    tmp.mkdir(parents=True, exist_ok=True)
+    ck = tmp / "ckpt_best.pt"
+    torch.save({"model": m.state_dict(), "model_config": json.loads(mc.to_json()),
+                "train_config": {"seq_len": 64}, "step": 0}, ck)
+    rep = full_report(ck, TrainConfig.data_dir, loops=[1, 2, 3], analysis_loops=3,
+                      eval_tokens=64 * 8, analysis_tokens=64 * 8, batch=4, device=device)
+    dc = rep["depth_curve"]["loss"]
+    ok = (len(dc) == 4 and all(math.isfinite(v) for v in dc)
+          and set(rep["early_exit"]) >= {"confidence", "kl_stability", "halting_head"}
+          and "difficulty_strata_by_final" in rep)
+    check("analysis pipeline runs end to end", ok,
+          f"depth curve len={len(dc)}, exit modes={sorted(rep['early_exit'])}")
+    fixed = rep["depth_sweep"]["3"]["val_loss"]
+    check("depth-sweep loss agrees with the per-step read-out at the same T",
+          abs(fixed - dc[-1]) < 0.05 * max(abs(fixed), 1.0),
+          f"sweep T=3: {fixed:.4f} vs depth_curve[-1]: {dc[-1]:.4f}")
+    anchor = [r for r in rep["early_exit"]["confidence"] if r["threshold"] > 1.0]
+    if anchor:
+        check("early-exit anchor equals the fixed-depth result",
+              abs(anchor[0]["loss"] - dc[-1]) < 1e-6,
+              f"{anchor[0]['loss']:.6f} vs {dc[-1]:.6f}")
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_bpb_consistency():
     from loopedlm.data import bpb_from_nll
     check("bits-per-byte formula", abs(bpb_from_nll(math.log(2), 1.0) - 1.0) < 1e-12,
@@ -278,6 +395,10 @@ def main():
     test_extra_params_are_scale_free()
     print("\ndata")
     test_data()
+    print("\nanalysis")
+    test_early_exit_synthetic()
+    test_strata_selection_bias()
+    test_analysis_pipeline(device)
     print("\nlosses and evaluation")
     test_eval_determinism(device)
     test_losses(device)

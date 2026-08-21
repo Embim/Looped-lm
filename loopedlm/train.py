@@ -1,6 +1,7 @@
 """Training loop with an exact token budget and a test-time depth sweep."""
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -79,11 +80,12 @@ def evaluate(model, data_dir: str, seq_len: int, batch: int, n_loops: int,
     stream = TokenStream(Path(data_dir) / "val.bin", seq_len, batch, device=device,
                          shuffle=False, max_windows=max(eval_tokens // seq_len, batch))
     model.eval()
+    amp = torch.autocast("cuda", dtype=torch.bfloat16, cache_enabled=False) if         str(device).startswith("cuda") else contextlib.nullcontext()
     tot, n = 0.0, 0
     step_tot: Optional[torch.Tensor] = None
     stats_acc: Dict[str, List[float]] = {}
     for x, y in stream.batches():
-        with torch.autocast("cuda", dtype=torch.bfloat16, cache_enabled=False):
+        with amp:
             out = model(x, n_loops=n_loops, collect_states=per_step, collect_stats=collect_stats)
             logits = model.head(out["hidden"])
         ce = F.cross_entropy(logits.float().reshape(-1, logits.shape[-1]), y.reshape(-1),
@@ -95,7 +97,7 @@ def evaluate(model, data_dir: str, seq_len: int, batch: int, n_loops: int,
             if step_tot is None:
                 step_tot = torch.zeros(len(traj), device=device, dtype=torch.float64)
             for t, st in enumerate(traj):
-                with torch.autocast("cuda", dtype=torch.bfloat16):
+                with amp:
                     lg = logits_at(model, st, out["cos"], out["sin"], None)
                 step_tot[t] += F.cross_entropy(lg.float(), y.reshape(-1), reduction="sum").double()
         if collect_stats:
@@ -235,8 +237,12 @@ def train(mc: ModelConfig, tc: TrainConfig, depth_sweep: Optional[List[int]] = N
         print(f"  [T={T:3d}] loss {r['val_loss']:.4f} ppl {r['val_ppl']:.2f} bpb {r['val_bpb']:.4f}",
               flush=True)
 
+    # The budget is a measured quantity, not a computed one: tok_seen accumulates
+    # y.numel() per micro-batch, so this catches a data stream that quietly ran
+    # short or a window layout that double-counts.
+    assert tok_seen == steps * tokens_per_step, (tok_seen, steps * tokens_per_step)
     summary = {"event": "final", "run": tc.run_name, "params": n_par, "params_non_emb": n_par_ne,
-               "train_tokens": steps * tokens_per_step, "wall_seconds": round(time.time() - t0, 1),
+               "train_tokens": tok_seen, "train_tokens_planned": steps * tokens_per_step, "wall_seconds": round(time.time() - t0, 1),
                "fwd_flops_per_token": fwd_flops,
                "train_flops_est": 3 * fwd_flops * steps * tokens_per_step,
                "best_periodic": best, "final": final, "depth_sweep": sweep,

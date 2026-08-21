@@ -16,6 +16,7 @@ the whole study is built on:
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 from pathlib import Path
@@ -56,17 +57,18 @@ def per_step_tables(model, data_dir: str, seq_len: int, batch: int, n_loops: int
     """
     stream = TokenStream(Path(data_dir) / "val.bin", seq_len, batch, device=device,
                          shuffle=False, max_windows=max(eval_tokens // seq_len, batch))
+    amp = torch.autocast("cuda", dtype=torch.bfloat16, cache_enabled=False) if         str(device).startswith("cuda") else contextlib.nullcontext()
     nll_c, conf_c, kl_c, halt_c = [], [], [], []
     has_halt = model.cfg.halting == "ponder"
     for x, y in stream.batches():
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with amp:
             out = model(x, n_loops=n_loops, collect_states=True)
         traj = out["traj"]
         tgt = y.reshape(-1)
         nll_b, conf_b, kl_b, halt_b = [], [], [], []
         prev_lp = None
         for t, st in enumerate(traj):
-            with torch.autocast("cuda", dtype=torch.bfloat16):
+            with amp:
                 lg = logits_at(model, st, out["cos"], out["sin"], None)
             lp = lg.float().log_softmax(-1)
             nll_b.append(-lp.gather(1, tgt[:, None]).squeeze(1))
@@ -96,15 +98,30 @@ def depth_curve(nll: np.ndarray, bpt: float) -> Dict:
             "bpb": [bpb_from_nll(v, bpt) for v in m]}
 
 
-def difficulty_strata(nll: np.ndarray, quantiles=(0.5, 0.8, 0.95, 0.99)) -> Dict:
-    """Depth curve restricted to the hardest tokens, graded by final-step loss."""
-    final = nll[-1]
-    order = np.argsort(final)
-    out = {}
-    n = len(final)
+def difficulty_strata(nll: np.ndarray, rank_by: Optional[np.ndarray] = None,
+                      quantiles=(0.5, 0.8, 0.95, 0.99)) -> Dict:
+    """Depth curve restricted to the hardest tokens.
+
+    The ranking criterion matters more than it looks.  Grading difficulty by the
+    loss at the *final* step and then reading the depth curve of that stratum is
+    selection on the outcome: tokens picked for a high final loss have an
+    inflated final point by construction, so the curve's right-hand end is
+    biased exactly where the conclusion is drawn.  Grading by the loss at step 1
+    moves the bias to the left-hand end instead.
+
+    Neither is trustworthy alone, so `full_report` computes both, plus -- when
+    `rank_by` carries the per-token loss of an *independent* model -- a ranking
+    that is not a function of this model's own noise at all.  The claim "the hard
+    tail keeps improving after the mean has flattened" is only reported as
+    supported if it survives all of them.
+    """
+    key = nll[1] if rank_by is None else rank_by
+    order = np.argsort(key)
+    out: Dict = {}
+    n = len(key)
     for q in quantiles:
         idx = order[int(n * q):]
-        out[f"top{int((1-q)*100)}pct_hardest"] = {
+        out[f"top{int(round((1 - q) * 100))}pct_hardest"] = {
             "n": int(len(idx)), "loss": nll[:, idx].mean(1).tolist()}
     idx = order[: int(n * 0.5)]
     out["easiest50pct"] = {"n": int(len(idx)), "loss": nll[:, idx].mean(1).tolist()}
@@ -146,7 +163,8 @@ def trajectory_stats(model, data_dir: str, seq_len: int, batch: int, n_loops: in
     acc: Dict[str, List] = {}
     ranks = []
     for bi, (x, y) in enumerate(stream.batches()):
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with (torch.autocast("cuda", dtype=torch.bfloat16, cache_enabled=False)
+              if str(device).startswith("cuda") else contextlib.nullcontext()):
             out = model(x, n_loops=n_loops, collect_stats=True, collect_states=True)
         for k, v in out["stats"].items():
             acc.setdefault(k, []).append(v)
@@ -168,7 +186,8 @@ def trajectory_stats(model, data_dir: str, seq_len: int, batch: int, n_loops: in
 def full_report(ckpt: str | Path, data_dir: str, out_json: Optional[str | Path] = None,
                 loops: Optional[List[int]] = None, analysis_loops: Optional[int] = None,
                 eval_tokens: int = 4_000_000, analysis_tokens: int = 1_000_000,
-                batch: int = 32, device: str = "cuda") -> Dict:
+                batch: int = 32, device: str = "cuda",
+                ref_ckpt: Optional[str | Path] = None) -> Dict:
     from .train import evaluate
 
     model, mc, ck = load_checkpoint(ckpt, device)
@@ -196,7 +215,20 @@ def full_report(ckpt: str | Path, data_dir: str, out_json: Optional[str | Path] 
     tab = per_step_tables(model, data_dir, seq, batch, Ta, analysis_tokens, device)
     rep["analysis_loops"] = Ta
     rep["depth_curve"] = depth_curve(tab["nll"], bpt)
+    # Three rankings, because each has a different selection bias; see
+    # difficulty_strata.  `ref_ckpt` supplies a ranking from an independent model.
     rep["difficulty_strata"] = difficulty_strata(tab["nll"])
+    rep["difficulty_strata_by_final"] = difficulty_strata(tab["nll"], rank_by=tab["nll"][-1])
+    if ref_ckpt:
+        ref_model, ref_mc, _ = load_checkpoint(ref_ckpt, device)
+        ref = per_step_tables(ref_model, data_dir, seq, batch, ref_mc.n_loops,
+                              analysis_tokens, device)
+        m = min(ref["nll"].shape[1], tab["nll"].shape[1])
+        rep["difficulty_strata_by_reference"] = difficulty_strata(
+            tab["nll"][:, :m], rank_by=ref["nll"][-1][:m])
+        rep["reference_model"] = {"checkpoint": str(ref_ckpt), "loops": ref_mc.n_loops,
+                                  "mean_loss": float(ref["nll"][-1].mean())}
+        del ref_model
     rep["early_exit"] = {
         "confidence": early_exit(tab["nll"], tab["conf"], "ge",
                                  [0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 0.99, 1.01], bpt),

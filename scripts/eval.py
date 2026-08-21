@@ -31,6 +31,10 @@ def main():
     ap.add_argument("--analysis_tokens", type=int, default=1_000_000)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--ref_ckpt", default=None,
+                    help="checkpoint of an independent model used to rank token "
+                         "difficulty without selection bias (e.g. the T=1 baseline)")
+    ap.add_argument("--device", default="cuda")
     ap.add_argument("--no_lock", action="store_true")
     a = ap.parse_args()
 
@@ -49,7 +53,8 @@ def main():
     def go():
         rep = full_report(ckpt, a.data_dir, out_json=out, loops=loops,
                           analysis_loops=a.analysis_loops, eval_tokens=a.eval_tokens,
-                          analysis_tokens=a.analysis_tokens, batch=a.batch)
+                          analysis_tokens=a.analysis_tokens, batch=a.batch,
+                          device=a.device, ref_ckpt=a.ref_ckpt)
         d = rep["depth_curve"]["loss"]
         print(f"\ndepth curve (read-out after each loop): "
               f"{' '.join(f'{v:.3f}' for v in d)}")

@@ -287,7 +287,7 @@ class LoopedQwen3(nn.Module):
             self.lm_head.weight = self.embed_tokens.weight
 
         # ---- input re-injection ----
-        if cfg.inject_input == "add":
+        if cfg.inject_input in ("add", "add_relative", "add_dropout"):
             self.inject_alpha = nn.Parameter(torch.ones(1))
         if cfg.inject_input == "adapter":
             self.inject_norm = RMSNorm(d, cfg.rms_norm_eps)
@@ -459,6 +459,18 @@ class LoopedQwen3(nn.Module):
         # --- input re-injection ---
         if cfg.inject_input == "add":
             x = x + self.inject_alpha.to(x.dtype) * e
+        elif cfg.inject_input == "add_relative":
+            # constant token share: normalise the state before adding e, so e's
+            # weight in the block input does not decay as |h| grows
+            rms = x.float().pow(2).mean(-1, keepdim=True).add(1e-8).sqrt().to(x.dtype)
+            x = x / rms + self.inject_alpha.to(x.dtype) * e
+        elif cfg.inject_input == "add_dropout":
+            p = (t / max(T - 1, 1)) * cfg.inject_drop_max
+            if self.training:
+                keep = (torch.rand(x.shape[0], x.shape[1], 1, device=x.device) >= p).to(x.dtype)
+                x = x + self.inject_alpha.to(x.dtype) * e * keep
+            else:
+                x = x + self.inject_alpha.to(x.dtype) * e * (1.0 - p)
         elif cfg.inject_input == "adapter":
             x = self.inject_proj(torch.cat((self.inject_norm(x), e), dim=-1))
 
@@ -574,6 +586,10 @@ class LoopedQwen3(nn.Module):
 
         vel = torch.zeros_like(h) if cfg.momentum else None
         prev = None                       # previous update direction, for orthogonal updates
+        # per-token exit: once a token's relative step falls below the threshold it
+        # stops updating, so late loops train only on the tokens that still move
+        alive = (torch.ones(h.shape[0], h.shape[1], 1, device=h.device, dtype=h.dtype)
+                 if cfg.token_exit_thresh > 0 else None)
         states: List[torch.Tensor] = [h] if keep_traj else []
         # Two collinearity traces, because they answer different questions:
         # cos_prev is measured on the step actually applied to the state (what the
@@ -614,8 +630,15 @@ class LoopedQwen3(nn.Module):
                 if cfg.loop_dropout > 0 and self.training:
                     keep = (torch.rand(B, 1, 1, device=h.device) > cfg.loop_dropout).to(delta.dtype)
                     delta = delta * keep
+                if alive is not None:
+                    delta = delta * alive
 
                 h, vel, prev, step = self._apply_update(h, delta, vel, prev, t)
+                if alive is not None and (t + 1) >= cfg.token_exit_min_t:
+                    with torch.no_grad():
+                        rel = (step.float().pow(2).sum(-1, keepdim=True).sqrt()
+                               / h.float().pow(2).sum(-1, keepdim=True).sqrt().clamp_min(1e-6))
+                    alive = alive * (rel > cfg.token_exit_thresh).to(alive.dtype)
 
             if cfg.decorr_weight > 0 and grad_on:
                 deltas_for_reg.append(delta)
@@ -629,6 +652,8 @@ class LoopedQwen3(nn.Module):
             if collect_stats:
                 with torch.no_grad():
                     stats["delta_rms"].append(delta.float().pow(2).mean().sqrt().item())
+                    if alive is not None:
+                        stats.setdefault("alive_frac", []).append(float(alive.float().mean()))
                     stats["step_rms"].append(step.float().pow(2).mean().sqrt().item())
                     stats["state_rms"].append(h.float().pow(2).mean().sqrt().item())
                     if prev_step is not None:

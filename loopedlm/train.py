@@ -181,7 +181,14 @@ def train(mc: ModelConfig, tc: TrainConfig, depth_sweep: Optional[List[int]] = N
         lr = lr_at(step, steps, tc) * lr_mult
         for g in opt.param_groups:
             g["lr"] = lr
-        T = sample_loops(mc, rng)
+        if mc.loop_sampling == "curriculum":
+            # grow the depth over training: the transient is established at small T
+            # before the late-loop gradient degeneracy can form
+            frac = step / max(steps - 1, 1)
+            T = int(round(mc.loop_min + (mc.n_loops - mc.loop_min) * frac))
+            T = max(mc.loop_min, min(T, mc.n_loops))
+        else:
+            T = sample_loops(mc, rng)
 
         opt.zero_grad(set_to_none=True)
         logs_acc: Dict[str, float] = {}

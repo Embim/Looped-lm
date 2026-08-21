@@ -39,7 +39,24 @@ class ModelConfig:
     # ---------------- state dynamics ----------------
     state_init: str = "embed"        # embed | zeros | randn
     state_init_std: float = 0.4
-    inject_input: str = "add"        # none | add | adapter
+    # none | add | adapter
+    #   add_relative - h is normalised before adding e, so the token keeps a
+    #                  constant share of the block input at every loop.  In plain
+    #                  "add" the share decays like 1/t (|h| grows linearly), which
+    #                  is an uncontrolled confound between depths.
+    #   add_dropout  - e is dropped with probability growing over the loops.  If
+    #                  the block ignores the state because the re-injected token is
+    #                  a sufficient bypass, removing the bypass at late steps forces
+    #                  it to read the state ("posterior collapse" cure).
+    inject_input: str = "add"
+    inject_drop_max: float = 0.9     # final drop probability for add_dropout
+
+    # Train-time per-token early exit (Mixture-of-Recursions-style): tokens whose
+    # state has stopped moving leave the loop, so late loops train exclusively on
+    # hard tokens instead of being dominated by easy-token gradients that teach the
+    # block to be a no-op.
+    token_exit_thresh: float = 0.0   # relative step size below which a token exits; 0 = off
+    token_exit_min_t: int = 4        # never exit before this many loops
     # residual | gated | normalized | sphere
     #   orthogonal        - project the update off the previous update direction,
     #                       so successive steps cannot be collinear by construction
@@ -62,6 +79,20 @@ class ModelConfig:
     depth_rope_frac: float = 0.25
     depth_rope_theta: float = 1000.0
     attn_window_schedule: str = "none"   # none | coarse2fine | fine2coarse
+
+    # ---------------- what the loop is made of ----------------
+    # Attention gathers context, the MLP computes; there is no reason the two need
+    # the same frequency inside a loop.  attn_every=k applies the attention
+    # sub-layer only on loops where t % k == 0, so the question "what is the loop's
+    # computation actually made of" becomes measurable.
+    loop_sublayers: str = "attn_mlp"   # attn_mlp | mlp_only | attn_only
+    attn_every: int = 1
+
+    # A second, slower state updated once every `slow_every` loops and read by the
+    # block as context.  Two timescales make the effective operator non-stationary
+    # by structure rather than by parameters, and give the recurrence a long-lived
+    # memory next to the fast one.  Costs two scalars.
+    slow_every: int = 0               # 0 disables
 
     # ---------------- loop memory ----------------
     loop_memory: str = "none"        # none | depth_attn
@@ -86,7 +117,7 @@ class ModelConfig:
     loop_dropout: float = 0.0
 
     # ---------------- train-time loop schedule ----------------
-    loop_sampling: str = "fixed"     # fixed | uniform | poisson
+    loop_sampling: str = "fixed"     # fixed | uniform | poisson | curriculum (T grows over training)
     loop_min: int = 1
     bptt_last_k: int = 0             # 0 -> full BPTT (gradient checkpointed)
     grad_ckpt: bool = True

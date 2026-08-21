@@ -131,6 +131,51 @@ add("K_bptt8_T32", {"n_loops": 32, "bptt_last_k": 8})
 add("K_bptt8_T64", {"n_loops": 64, "bptt_last_k": 8})
 add("K_bptt4_T64", {"n_loops": 64, "bptt_last_k": 4})
 
+# --- Q. the e-injection confound (external review, "posterior collapse" reading) --
+# In h_t = h + Core(h + e), the token's share of the block input decays like 1/t as
+# |h| grows -- an uncontrolled confound across depths.  Worse, e may be the bypass
+# that lets the block cut loss without reading the state at all.  Two controls:
+# constant share (add_relative), and removing the bypass at late steps (add_dropout)
+# to force the block to read the state.
+add("Q_relative_T16", {"inject_input": "add_relative"})
+add("Q_relative_T32", {"n_loops": 32, "inject_input": "add_relative"})
+add("Q_edrop_T16", {"inject_input": "add_dropout"})
+add("Q_edrop_T32", {"n_loops": 32, "inject_input": "add_dropout"})
+
+# --- X. train-time per-token early exit (Mixture-of-Recursions-style) ------------
+# Mean CE is dominated by easy tokens that settle in a few steps; their near-zero
+# late-step gradients (T identical terms) train the tail of the loop to be a no-op.
+# Exiting settled tokens makes late loops train exclusively on hard tokens.  Side
+# effect worth knowing: an untrained model moves little (rel step ~0.016 vs 0.03-
+# 0.24 when trained), so early in training most tokens exit at min_t and the
+# effective depth grows as the block strengthens -- an automatic curriculum.
+add("X_exit_T16", {"token_exit_thresh": 0.03, "token_exit_min_t": 4})
+add("X_exit_T32", {"n_loops": 32, "token_exit_thresh": 0.03, "token_exit_min_t": 4})
+add("X_exit_hi_T32", {"n_loops": 32, "token_exit_thresh": 0.06, "token_exit_min_t": 4})
+add("X_exit_drope_T32", {"n_loops": 32, "token_exit_thresh": 0.03, "token_exit_min_t": 4,
+                         "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
+
+# --- U. unshared depth at the SAME 9.44M budget: the ceiling experiment ----------
+# If the optimal unshared depth at this parameter count is small, no looping scheme
+# should be expected to make depth 32 pay, because looping is strictly harder than
+# unshared depth at equal effective depth.  Width shrinks as depth grows so every
+# point costs ~9.2-9.4M params -- these are in-budget, honest baselines.
+add("U_L4", {"d_model": 384, "n_heads": 6, "head_dim": 64, "n_kv_heads": 2,
+             "intermediate_size": 992, "n_core": 4, "n_loops": 1, "max_loops": 4})
+add("U_L8", {"d_model": 288, "n_heads": 6, "head_dim": 48, "n_kv_heads": 2,
+             "intermediate_size": 736, "n_core": 8, "n_loops": 1, "max_loops": 4})
+add("U_L12", {"d_model": 240, "n_heads": 5, "head_dim": 48, "n_kv_heads": 1,
+              "intermediate_size": 672, "n_core": 12, "n_loops": 1, "max_loops": 4})
+add("U_L16", {"d_model": 208, "n_heads": 4, "head_dim": 52, "n_kv_heads": 1,
+              "intermediate_size": 576, "n_core": 16, "n_loops": 1, "max_loops": 4})
+add("U_L24", {"d_model": 176, "n_heads": 4, "head_dim": 44, "n_kv_heads": 1,
+              "intermediate_size": 480, "n_core": 24, "n_loops": 1, "max_loops": 4})
+
+# --- curriculum: establish the transient at small T before the tail degeneracy ---
+add("K_curriculum_T32", {"loop_sampling": "curriculum", "loop_min": 2, "n_loops": 32})
+add("K_curriculum_drope", {"loop_sampling": "curriculum", "loop_min": 2, "n_loops": 32,
+                           "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
+
 # --- P. the depth-RoPE frontier ---------------------------------------------
 # First mechanism to beat the naive optimum: at T=16, rotating a fraction of the
 # channels by a step-dependent angle gives 4.1612 at frac=0.25 and 4.1405 at

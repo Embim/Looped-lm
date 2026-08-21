@@ -54,7 +54,9 @@ def test_causality(device):
     """A change at position j must not move the logits at any position i < j."""
     for kw in ({}, {"loop_memory": "depth_attn"}, {"readout": "pool_gate"},
                {"depth_cond": "depth_rope"}, {"attn_window_schedule": "local2global"},
-               {"update": "normalized", "momentum": True, "momentum_read": True}):
+               {"update": "normalized", "momentum": True, "momentum_read": True},
+               {"update": "orthogonal"}, {"update": "orthogonal_sphere"},
+               {"n_chains": 3}, {"n_chains": 3, "chain_combine": "gate"}):
         torch.manual_seed(0)
         m = LoopedQwen3(small(**kw)).to(device).eval()
         x = torch.randint(0, 256, (2, 16), device=device)
@@ -102,6 +104,56 @@ def test_loop_count_effect(device):
         h = [m(x, n_loops=T)["hidden"] for T in (1, 2, 4, 8)]
     diffs = [(h[i + 1] - h[i]).abs().max().item() for i in range(3)]
     check("loop count changes the state", min(diffs) > 1e-4, f"diffs={[f'{d:.3f}' for d in diffs]}")
+
+
+def test_orthogonal_updates(device):
+    """The applied steps must be exactly orthogonal, and the norm must be held."""
+    for upd, norm_held in (("orthogonal", False), ("orthogonal_sphere", True)):
+        m = LoopedQwen3(small(n_loops=10, max_loops=12, update=upd)).to(device).eval()
+        x = torch.randint(0, 256, (2, 16), device=device)
+        with torch.no_grad():
+            st = m(x, collect_stats=True)["stats"]
+        worst = max(abs(v) for v in st["cos_prev"])
+        raw = sum(st["cos_prev_raw"]) / len(st["cos_prev_raw"])
+        drift = max(st["state_rms"]) / min(st["state_rms"])
+        check(f"{upd}: applied steps orthogonal", worst < 1e-3,
+              f"max|cos| = {worst:.2e} while the block's raw output stays at {raw:+.2f}")
+        if norm_held:
+            check(f"{upd}: state norm held", drift < 1.05, f"max/min |h| = {drift:.3f}")
+    # a spherical update alone fixes the norm but not the direction -- the fact that
+    # motivates the 2x2 in group R
+    m = LoopedQwen3(small(n_loops=10, max_loops=12, update="sphere")).to(device).eval()
+    with torch.no_grad():
+        st = m(torch.randint(0, 256, (2, 16), device=device), collect_stats=True)["stats"]
+    check("sphere fixes the norm but leaves steps collinear",
+          max(st["state_rms"]) / min(st["state_rms"]) < 1.05 and min(st["cos_prev"]) > 0.5,
+          f"|h| ratio {max(st['state_rms'])/min(st['state_rms']):.3f}, "
+          f"min cos {min(st['cos_prev']):+.3f}")
+
+
+def test_chains(device):
+    """Chains must be deterministic, distinct, and cost FLOPs but not parameters."""
+    base = LoopedQwen3(small(n_loops=8)).n_params()
+    for comb in ("mean", "gate"):
+        mc = small(n_loops=8, n_chains=4, chain_combine=comb)
+        m = LoopedQwen3(mc).to(device).eval()
+        x = torch.randint(0, 256, (2, 16), device=device)
+        with torch.no_grad():
+            a, b = m(x)["hidden"], m(x)["hidden"]
+        extra = m.n_params() - base
+        f_one = LoopedQwen3(small(n_loops=8)).flops_per_token(seq_len=32)
+        f_four = m.flops_per_token(seq_len=32)
+        check(f"chains ({comb}) deterministic at eval", torch.equal(a, b))
+        # offsets (n_chains * d) plus, for the gated combiner, a query and a norm gain
+        budget = (mc.n_chains + (2 if comb == "gate" else 0)) * mc.d_model
+        check(f"chains ({comb}) cost compute not parameters",
+              extra <= budget and f_four > 3.5 * f_one,
+              f"+{extra} params (bound {budget}), {f_four/f_one:.2f}x FLOPs")
+    # 4 chains of 8 loops must cost what 1 chain of 32 loops costs
+    a = LoopedQwen3(small(n_loops=8, n_chains=4)).flops_per_token(seq_len=32)
+    b = LoopedQwen3(small(n_loops=32, max_loops=32)).flops_per_token(seq_len=32)
+    check("4x8 chains are FLOP-matched to 1x32 loops", abs(a - b) / b < 1e-9,
+          f"{a/1e6:.3f} vs {b/1e6:.3f} MFLOPs/token")
 
 
 def test_bptt_equivalence(device):
@@ -394,6 +446,8 @@ def main():
     test_window_mask(device)
     test_depth_rope_inverse(device)
     test_loop_count_effect(device)
+    test_orthogonal_updates(device)
+    test_chains(device)
     print("\ngradients")
     test_bptt_equivalence(device)
     print("\nbudgets")

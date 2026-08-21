@@ -131,6 +131,51 @@ add("K_bptt8_T32", {"n_loops": 32, "bptt_last_k": 8})
 add("K_bptt8_T64", {"n_loops": 64, "bptt_last_k": 8})
 add("K_bptt4_T64", {"n_loops": 64, "bptt_last_k": 4})
 
+# --- R. radical departures, all compute-matched to the naive T=32 run -------
+# Naive looping peaks at T=8 (4.2028) and T=32 is worse (4.2880), while the
+# trajectory diagnostics say the loop loses dimensionality rather than motion.
+# These abandon a premise rather than tuning a knob, and each is matched in FLOPs
+# to naive T=32 so the comparison is about *how* the compute is spent.
+#
+# 1. Forced turning: make collinearity geometrically impossible instead of
+#    penalising it.  Zero parameters.
+#    A 2x2 that separates the two pathologies, which the loss curve alone cannot:
+#      growing norm + collinear steps = residual  (A_depth32)
+#      fixed norm   + collinear steps = sphere    (R_sphere_T32)
+#      growing norm + orthogonal steps= orthogonal
+#      fixed norm   + orthogonal steps= orthogonal_sphere
+#    Measured before running: a spherical update alone does NOT decorrelate the
+#    steps (cos stays 0.99 -- a great circle is still "straight"), while explicit
+#    projection drives the applied-step cosine to exactly 0.  So the pair isolates
+#    whether depth is wasted on norm or on direction.
+add("R_sphere_T32", {"n_loops": 32, "update": "sphere"})
+add("R_ortho_T32", {"n_loops": 32, "update": "orthogonal"})
+add("R_orthosphere_T32", {"n_loops": 32, "update": "orthogonal_sphere"})
+add("R_orthosphere_T64", {"n_loops": 64, "update": "orthogonal_sphere"})
+add("R_orthosphere_T8", {"n_loops": 8, "update": "orthogonal_sphere"})
+#
+# 2. Spend the FLOPs on breadth instead of depth: several shorter trajectories
+#    from different learned starting points, combined at the read-out.  4x8 and
+#    8x4 both cost exactly what one 32-loop chain costs.
+add("R_chains4_T8", {"n_chains": 4, "n_loops": 8})
+add("R_chains4_T8_gate", {"n_chains": 4, "n_loops": 8, "chain_combine": "gate"})
+add("R_chains8_T4", {"n_chains": 8, "n_loops": 4})
+add("R_chains2_T16", {"n_chains": 2, "n_loops": 16})
+#
+# 3. The loop as annealing rather than accumulation: start from noise and let the
+#    block denoise it over the steps.  Diffusion models are the existence proof
+#    that hundreds of sequential applications of one network keep paying; if that
+#    mechanism transfers, depth should stop saturating.
+add("R_anneal_T32", {"n_loops": 32, "state_init": "randn", "state_init_std": 1.0,
+                     "noise_std": 0.5, "noise_schedule": "linear_decay"})
+add("R_anneal_sqrt_T32", {"n_loops": 32, "state_init": "randn", "state_init_std": 1.0,
+                          "noise_std": 0.5, "noise_schedule": "sqrt_decay"})
+#
+# 4. Combinations of whichever of the above survives.
+add("R_orthosphere_chains", {"n_chains": 4, "n_loops": 8, "update": "orthogonal_sphere"})
+add("R_orthosphere_uniform", {"loop_sampling": "uniform", "loop_min": 1, "n_loops": 32,
+                              "update": "orthogonal_sphere"})
+
 # --- M. a second model size, to make the scaling claim a measurement --------
 # Every other result comes from one model size, so any statement about scaling is
 # an argument about asymptotic cost rather than an observed trend.  This repeats

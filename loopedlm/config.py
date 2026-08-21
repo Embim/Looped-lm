@@ -40,7 +40,13 @@ class ModelConfig:
     state_init: str = "embed"        # embed | zeros | randn
     state_init_std: float = 0.4
     inject_input: str = "add"        # none | add | adapter
-    update: str = "residual"         # residual | gated | normalized | sphere
+    # residual | gated | normalized | sphere
+    #   orthogonal        - project the update off the previous update direction,
+    #                       so successive steps cannot be collinear by construction
+    #   orthogonal_sphere - also project off the radial direction (a step tangent to
+    #                       the sphere) and renormalise, so the norm cannot grow
+    #                       either: the trajectory is forced to turn every step
+    update: str = "residual"
     update_alpha_init: float = -1.0  # <0 -> 1/sqrt(n_loops)
     momentum: bool = False           # heavy-ball on the residual stream
     momentum_beta: float = 0.9
@@ -56,6 +62,16 @@ class ModelConfig:
     # ---------------- loop memory ----------------
     loop_memory: str = "none"        # none | depth_attn
     depth_attn_dim: int = 64
+
+    # ---------------- parallel chains instead of depth ----------------
+    # Sequential depth stops paying after T=8 on this setup, so the same FLOPs can
+    # be spent on several independent shorter trajectories from different random
+    # starts, combined at the read-out.  Compute scales with n_chains, parameters
+    # do not.  This asks whether the budget is better spent exploring than going
+    # deeper, which is a different answer to "FLOPs per parameter" than looping.
+    n_chains: int = 1
+    chain_combine: str = "mean"      # mean | gate  (gate = learned per-token weights)
+    chain_init_noise: float = 0.5    # spread of the per-chain starting perturbation
 
     # ---------------- read-out ----------------
     readout: str = "last"            # last | pool_learned | pool_gate

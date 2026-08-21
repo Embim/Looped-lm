@@ -231,7 +231,7 @@ class LoopedQwen3(nn.Module):
 
         # ---- update rule ----
         a0 = cfg.update_alpha_init if cfg.update_alpha_init > 0 else 1.0 / math.sqrt(cfg.n_loops)
-        if cfg.update in ("gated", "normalized", "sphere"):
+        if cfg.update in ("gated", "normalized", "sphere", "orthogonal", "orthogonal_sphere"):
             self.step_alpha = nn.Parameter(torch.full((T,), float(a0)))
         if cfg.momentum and cfg.momentum_learn_beta:
             b = min(max(cfg.momentum_beta, 1e-3), 1 - 1e-3)
@@ -241,6 +241,17 @@ class LoopedQwen3(nn.Module):
 
         # ---- loop memory ----
         self.depth_attn = DepthAttention(cfg) if cfg.loop_memory == "depth_attn" else None
+
+        # ---- parallel chains ----
+        if cfg.n_chains > 1:
+            # one learned starting offset per chain: deterministic at eval time (a
+            # random perturbation would make evaluation irreproducible) and the model
+            # can learn to make the chains complementary rather than merely different
+            self.chain_offset = nn.Parameter(
+                torch.randn(cfg.n_chains, d) * cfg.chain_init_noise)
+            if cfg.chain_combine == "gate":
+                self.chain_query = nn.Parameter(torch.zeros(d))
+                self.chain_norm = RMSNorm(d, cfg.rms_norm_eps)
 
         # ---- read-out ----
         if cfg.readout == "pool_learned":
@@ -413,25 +424,85 @@ class LoopedQwen3(nn.Module):
         e = self.embed_norm(self.embed_tokens(idx))
         cos, sin = self.rope(S, idx.device, e.dtype)
 
-        h = e
+        h0 = e
         for blk in self.prelude:
-            h = blk(h, cos, sin)
+            h0 = blk(h0, cos, sin)
 
         if cfg.state_init == "zeros":
-            h = torch.zeros_like(h)
+            h0 = torch.zeros_like(h0)
         elif cfg.state_init == "randn":
-            h = torch.randn_like(h) * cfg.state_init_std
+            h0 = torch.randn_like(h0) * cfg.state_init_std
 
-        vel = torch.zeros_like(h) if cfg.momentum else None
-        # Deep supervision and the halting head read the per-step states, so the
-        # trajectory has to be kept for them too -- without this the auxiliary
-        # losses silently do nothing (they see an empty trajectory) and a whole
-        # ablation group would have looked like "no effect".
         keep_traj = (collect_states or cfg.readout != "last" or cfg.halting != "none"
                      or cfg.deep_supervision != "none")
+
+        if cfg.n_chains == 1:
+            res = self._run_chain(h0, e, cos, sin, T, k, 0, keep_traj, collect_stats)
+        else:
+            runs = [self._run_chain(h0, e, cos, sin, T, k, c, keep_traj,
+                                    collect_stats and c == 0)
+                    for c in range(cfg.n_chains)]
+            res = self._combine_chains(runs, keep_traj)
+
+        out = res["hidden"]
+        for blk in self.coda:
+            out = blk(out, cos, sin)
+        res["hidden"] = out
+        res.update({"n_loops": T, "cos": cos, "sin": sin})
+        return res
+
+    # ------------------------------------------------------------------
+    def _combine_chains(self, runs: List[Dict], keep_traj: bool) -> Dict:
+        """Combine independent trajectories at the read-out.
+
+        Compute scales with the number of chains, parameters do not (only one
+        d-vector of starting offset per chain).  This is the alternative to depth:
+        the same FLOPs spent on several shorter explorations instead of one long
+        drift.
+        """
+        cfg = self.cfg
+        H = torch.stack([r["hidden"] for r in runs], 0)          # [C,B,S,d]
+        if cfg.chain_combine == "mean":
+            hidden = H.mean(0)
+        elif cfg.chain_combine == "gate":
+            sc = (self.chain_norm(H) * self.chain_query.to(H.dtype)).sum(-1) * (H.shape[-1] ** -0.5)
+            w = sc.float().softmax(0).to(H.dtype)                 # [C,B,S]
+            hidden = (H * w.unsqueeze(-1)).sum(0)
+        else:
+            raise ValueError(cfg.chain_combine)
+        res: Dict = {"hidden": hidden}
+        if keep_traj:
+            # the halting / deep-supervision paths read one trajectory; use the first
+            res["traj"] = runs[0]["traj"]
+        if "stats" in runs[0]:
+            res["stats"] = runs[0]["stats"]
+        dec = [r["decorr"] for r in runs if "decorr" in r]
+        if dec:
+            res["decorr"] = torch.stack(dec).mean()
+        return res
+
+    # ------------------------------------------------------------------
+    def _run_chain(self, h0, e, cos, sin, T: int, k: int, chain: int,
+                   keep_traj: bool, collect_stats: bool) -> Dict:
+        cfg = self.cfg
+        B = h0.shape[0]
+        h = h0
+        if cfg.n_chains > 1:
+            h = h + self.chain_offset[chain].to(h.dtype)
+
+        vel = torch.zeros_like(h) if cfg.momentum else None
+        prev = None                       # previous update direction, for orthogonal updates
         states: List[torch.Tensor] = [h] if keep_traj else []
-        stats = {"delta_rms": [], "state_rms": [], "cos_prev": []} if collect_stats else None
+        # Two collinearity traces, because they answer different questions:
+        # cos_prev is measured on the step actually applied to the state (what the
+        # trajectory does), cos_prev_raw on the block's raw output (what the block
+        # wants to do).  Measuring only the raw one made the orthogonal update look
+        # like it was not working, when in fact its applied steps are orthogonal by
+        # construction and only the block's intent stayed collinear.
+        stats = ({"delta_rms": [], "state_rms": [], "cos_prev": [], "cos_prev_raw": [],
+                  "step_rms": []} if collect_stats else None)
         prev_delta = None
+        prev_step = None
         deltas_for_reg: List[torch.Tensor] = []
         mem_list_k: List[torch.Tensor] = []
         mem_list_v: List[torch.Tensor] = []
@@ -462,7 +533,7 @@ class LoopedQwen3(nn.Module):
                     keep = (torch.rand(B, 1, 1, device=h.device) > cfg.loop_dropout).to(delta.dtype)
                     delta = delta * keep
 
-                h, vel = self._apply_update(h, delta, vel, t)
+                h, vel, prev, step = self._apply_update(h, delta, vel, prev, t)
 
             if cfg.decorr_weight > 0 and grad_on:
                 deltas_for_reg.append(delta)
@@ -476,18 +547,18 @@ class LoopedQwen3(nn.Module):
             if collect_stats:
                 with torch.no_grad():
                     stats["delta_rms"].append(delta.float().pow(2).mean().sqrt().item())
+                    stats["step_rms"].append(step.float().pow(2).mean().sqrt().item())
                     stats["state_rms"].append(h.float().pow(2).mean().sqrt().item())
-                    if prev_delta is not None:
-                        a = delta.float().flatten(0, 1)
-                        b = prev_delta.float().flatten(0, 1)
-                        stats["cos_prev"].append(F.cosine_similarity(a, b, dim=-1).mean().item())
-                    prev_delta = delta
+                    if prev_step is not None:
+                        stats["cos_prev"].append(F.cosine_similarity(
+                            step.float().flatten(0, 1), prev_step.float().flatten(0, 1),
+                            dim=-1).mean().item())
+                        stats["cos_prev_raw"].append(F.cosine_similarity(
+                            delta.float().flatten(0, 1), prev_delta.float().flatten(0, 1),
+                            dim=-1).mean().item())
+                    prev_delta, prev_step = delta, step
 
-        out = self._readout(states, h)
-        for blk in self.coda:
-            out = blk(out, cos, sin)
-
-        res = {"hidden": out, "n_loops": T, "cos": cos, "sin": sin}
+        res: Dict = {"hidden": self._readout(states, h)}
         if keep_traj:
             res["traj"] = states
         if collect_stats:
@@ -510,11 +581,19 @@ class LoopedQwen3(nn.Module):
         rms = h.float().pow(2).mean(-1, keepdim=True).sqrt().to(h.dtype)
         return torch.randn_like(h) * (cfg.noise_std * s) * rms
 
-    def _apply_update(self, h, delta, vel, t):
+    @staticmethod
+    def _project_off(x, d):
+        """Remove from x its component along d (per position, per sequence)."""
+        u = d / d.float().pow(2).sum(-1, keepdim=True).add(1e-8).sqrt().to(d.dtype)
+        return x - (x * u).sum(-1, keepdim=True) * u
+
+    def _apply_update(self, h, delta, vel, prev, t):
         cfg = self.cfg
+        ORTHO = ("orthogonal", "orthogonal_sphere")
         a = None
-        if cfg.update in ("gated", "normalized", "sphere"):
+        if cfg.update in ("gated", "normalized", "sphere") + ORTHO:
             a = self.step_alpha[min(t, cfg.max_loops - 1)]
+
         if cfg.update == "residual":
             step = delta
         elif cfg.update == "gated":
@@ -522,6 +601,28 @@ class LoopedQwen3(nn.Module):
         elif cfg.update in ("normalized", "sphere"):
             rms = delta.float().pow(2).mean(-1, keepdim=True).add(1e-8).sqrt().to(delta.dtype)
             step = a * delta / rms
+        elif cfg.update in ORTHO:
+            # The measured failure mode is that successive updates become collinear
+            # (cos -> 0.999) while the state norm grows linearly.  Projecting the
+            # update off the previous update direction makes that geometrically
+            # impossible; additionally projecting off the radial direction makes the
+            # step tangent to the sphere, so the norm cannot grow either and the
+            # trajectory has to turn at every step.  Costs no parameters.
+            d = delta
+            p = prev
+            if cfg.update == "orthogonal_sphere":
+                # Order matters: make the step tangent first, then orthogonalise it
+                # against the *tangential* part of the previous step.  Projecting off
+                # the radial direction after removing prev would put a component of
+                # prev back in, leaving the two steps not actually orthogonal.
+                d = self._project_off(d, h)
+                if p is not None:
+                    p = self._project_off(p, h)
+            if p is not None:
+                d = self._project_off(d, p)
+            rms = d.float().pow(2).mean(-1, keepdim=True).add(1e-8).sqrt().to(d.dtype)
+            step = a * d / rms
+            prev = d.detach()
         else:
             raise ValueError(cfg.update)
 
@@ -530,10 +631,10 @@ class LoopedQwen3(nn.Module):
             vel = beta * vel + step
             step = vel
         h = h + step
-        if cfg.update == "sphere":
+        if cfg.update in ("sphere", "orthogonal_sphere"):
             rms = h.float().pow(2).mean(-1, keepdim=True).add(1e-8).sqrt().to(h.dtype)
             h = h / rms
-        return h, vel
+        return h, vel, prev, step
 
     def _readout(self, states, h):
         cfg = self.cfg
@@ -592,7 +693,9 @@ class LoopedQwen3(nn.Module):
         mlp = 2 * 3 * d * cfg.intermediate_size
         per_layer = proj + score + mlp
         n_once = cfg.n_prelude + cfg.n_coda
-        f = per_layer * (n_once + T * cfg.n_core)
+        # Parallel chains multiply the looped part: this is what makes
+        # "n_chains chains of T loops" comparable to "one chain of n_chains*T loops".
+        f = per_layer * (n_once + T * cfg.n_core * cfg.n_chains)
         if cfg.loop_memory == "depth_attn":
             dm = cfg.depth_attn_dim
             f += T * (2 * (3 * d * dm + dm * d) + 2 * 2 * dm * (T / 2.0))

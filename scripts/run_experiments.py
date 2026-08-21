@@ -71,6 +71,12 @@ def main():
     ap.add_argument("--presets", default=None, help="comma-separated preset names")
     ap.add_argument("--tokens", type=int, default=None, help="override train.total_tokens")
     ap.add_argument("--suffix", default="", help="appended to the run name")
+    ap.add_argument("--seeds", default=None,
+                    help="comma-separated seeds; each preset runs once per seed as "
+                         "<preset>_s<seed>.  Differences below the seed spread are "
+                         "not results, so any claimed effect needs this.")
+    ap.add_argument("--set", action="append", dest="sets", default=[],
+                    help="passed through to scripts/train.py, e.g. train.lr=2e-3")
     ap.add_argument("--depth_sweep", default=None)
     ap.add_argument("--tok_s", type=float, default=52700.0, help="measured throughput at T=16,n_core=2")
     ap.add_argument("--force", action="store_true")
@@ -104,9 +110,12 @@ def main():
     if a.dry_run:
         return
 
+    seeds = [int(s) for s in a.seeds.split(",")] if a.seeds else [None]
+    queue = [(n, s) for n in queue for s in seeds]
+
     done, failed = [], []
-    for i, name in enumerate(queue, 1):
-        run_name = name + a.suffix
+    for i, (name, seed) in enumerate(queue, 1):
+        run_name = name + a.suffix + (f"_s{seed}" if seed is not None else "")
         res_file = RESULTS / f"{run_name}.json"
         if res_file.exists() and not a.force:
             # Skip only a result produced by *this* machine and this compile mode.
@@ -137,6 +146,10 @@ def main():
                "--name", run_name]
         if a.tokens:
             cmd += ["--set", f"train.total_tokens={a.tokens}"]
+        if seed is not None:
+            cmd += ["--set", f"train.seed={seed}"]
+        for s in a.sets:
+            cmd += ["--set", s]
         if a.depth_sweep:
             cmd += ["--depth_sweep", a.depth_sweep]
         env = dict(os.environ, PYTHONUTF8="1",

@@ -60,7 +60,9 @@ def test_causality(device):
                {"update": "geodesic"}, {"update": "phase"},
                {"update": "hyperbolic", "state_init": "zeros"},
                {"inject_input": "add_relative"}, {"inject_input": "add_dropout"},
-               {"token_exit_thresh": 0.05, "token_exit_min_t": 2}):
+               {"token_exit_thresh": 0.05, "token_exit_min_t": 2},
+               {"transport": "rotate"}, {"carrier_dim": 32},
+               {"transport": "rotate", "carrier_dim": 32}):
         torch.manual_seed(0)
         m = LoopedQwen3(small(**kw)).to(device).eval()
         x = torch.randint(0, 256, (2, 16), device=device)

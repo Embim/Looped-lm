@@ -74,6 +74,29 @@ class ModelConfig:
     momentum_learn_beta: bool = True
     momentum_read: bool = False      # block also reads the velocity
 
+    # ---------------- transport: how the state is carried between loops --------
+    # identity: h_t = h_{t-1} + delta (standard residual).  Rewards repetition:
+    #           identical block outputs accumulate coherently, which is the
+    #           measured pathology (linear norm growth along one direction).
+    # rotate:   h_t = R h_{t-1} + delta, with R a fixed orthogonal pairwise
+    #           rotation (RoPE over depth, applied to the stream itself, not as
+    #           conjugation).  A repeated output now accumulates as sum_t R^t d --
+    #           a geometric sum whose magnitude per pair is |sin(T*th/2)/sin(th/2)|:
+    #           repetition destructively interferes, drift cannot dominate the
+    #           norm, and the input fossil R^t e rotates away so late steps must
+    #           read actively maintained state.  Zero parameters.
+    transport: str = "identity"       # identity | rotate
+    transport_theta_max: float = 1.5707963  # largest pair angle (pi/2)
+    transport_carrier_frac: float = 0.125   # fraction of pairs with theta=0
+
+    # ---------------- carrier accumulator (head-side bottleneck) ---------------
+    # A small extra stream c (c_0 = 0) that e never enters; the head reads ONLY
+    # U c_T, and c is written exclusively from the state: c_t = R_c c_{t-1} +
+    # g_t * P h_t.  The only input-to-head path is through per-step writes, so the
+    # head cannot decode anything the loop did not actively produce.  ~135K params.
+    carrier_dim: int = 0              # 0 disables
+    carrier_rotate: bool = True
+
     # ---------------- breaking stationarity ----------------
     depth_cond: str = "none"         # none | sinusoid | learned_emb | adaln | depth_rope
     depth_rope_frac: float = 0.25

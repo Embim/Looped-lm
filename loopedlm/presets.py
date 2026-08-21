@@ -176,6 +176,31 @@ add("K_curriculum_T32", {"loop_sampling": "curriculum", "loop_min": 2, "n_loops"
 add("K_curriculum_drope", {"loop_sampling": "curriculum", "loop_min": 2, "n_loops": 32,
                            "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
 
+# --- Y. architecture changes from the external review -----------------------
+# Rotational transport: h_t = R h_{t-1} + delta with R a fixed RoPE-style pairwise
+# rotation of the stream itself.  Repetition accumulates as sum_t R^t d, a
+# geometric sum that destructively interferes on rotated pairs, so the measured
+# reward structure of the drift pathology (coherent accumulation of identical
+# outputs) is removed at zero parameters.  The log-spaced angle spectrum leaves
+# slow "carrier" pairs for long-lived content and fast pairs for working memory.
+add("Y_rotate_T16", {"transport": "rotate"})
+add("Y_rotate_T32", {"n_loops": 32, "transport": "rotate"})
+add("Y_rotate_T64", {"n_loops": 64, "transport": "rotate"})
+add("Y_rotate_fast_T32", {"n_loops": 32, "transport": "rotate",
+                          "transport_carrier_frac": 0.0})
+# Carrier accumulator: the head reads ONLY U c_T where c_0 = 0, e never enters c,
+# and c is written exclusively from the per-step states (c_t = R_c c_{t-1} +
+# g_t P h_t).  The sole input-to-head path is through the loop's writes, so the
+# head cannot decode anything the loop did not actively produce.  ~135K params.
+add("Y_carrier_T16", {"carrier_dim": 128})
+add("Y_carrier_T32", {"n_loops": 32, "carrier_dim": 128})
+# The stack: transport fixes repetition, the carrier fixes the read-out bottleneck;
+# the review's single highest-probability configuration.
+add("Y_stack_T32", {"n_loops": 32, "transport": "rotate", "carrier_dim": 128})
+add("Y_stack_T64", {"n_loops": 64, "transport": "rotate", "carrier_dim": 128})
+add("Y_stack_drope_T32", {"n_loops": 32, "transport": "rotate", "carrier_dim": 128,
+                          "depth_cond": "depth_rope", "depth_rope_frac": 0.5})
+
 # --- P. the depth-RoPE frontier ---------------------------------------------
 # First mechanism to beat the naive optimum: at T=16, rotating a fraction of the
 # channels by a step-dependent angle gives 4.1612 at frac=0.25 and 4.1405 at

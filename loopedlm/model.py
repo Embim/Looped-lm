@@ -319,6 +319,29 @@ class LoopedQwen3(nn.Module):
         # ---- loop memory ----
         self.depth_attn = DepthAttention(cfg) if cfg.loop_memory == "depth_attn" else None
 
+        # ---- transport rotation (fixed, orthogonal, RoPE-over-depth) ----
+        if cfg.transport == "rotate":
+            half = d // 2
+            n_car = int(half * cfg.transport_carrier_frac)
+            th = torch.zeros(half)
+            n_rot = half - n_car
+            if n_rot > 0:
+                th[n_car:] = torch.logspace(math.log10(cfg.transport_theta_max / 64.0),
+                                            math.log10(cfg.transport_theta_max), n_rot)
+            self.register_buffer("stream_cos", th.cos(), persistent=False)
+            self.register_buffer("stream_sin", th.sin(), persistent=False)
+
+        # ---- carrier accumulator ----
+        if cfg.carrier_dim > 0:
+            cd = cfg.carrier_dim
+            self.carrier_down = nn.Linear(d, cd, bias=False)
+            self.carrier_up = nn.Linear(cd, d, bias=False)
+            self.carrier_gate = nn.Parameter(torch.full((cfg.max_loops,), 0.1))
+            halfc = cd // 2
+            thc = torch.logspace(math.log10(1.5707963 / 64.0), math.log10(1.5707963), halfc)
+            self.register_buffer("carrier_cos", thc.cos(), persistent=False)
+            self.register_buffer("carrier_sin", thc.sin(), persistent=False)
+
         # ---- parallel chains ----
         if cfg.n_chains > 1:
             # one learned starting offset per chain: deterministic at eval time (a
@@ -586,6 +609,8 @@ class LoopedQwen3(nn.Module):
 
         vel = torch.zeros_like(h) if cfg.momentum else None
         prev = None                       # previous update direction, for orthogonal updates
+        carrier = (torch.zeros(h.shape[0], h.shape[1], cfg.carrier_dim, device=h.device,
+                               dtype=h.dtype) if cfg.carrier_dim > 0 else None)
         # per-token exit: once a token's relative step falls below the threshold it
         # stops updating, so late loops train only on the tokens that still move
         alive = (torch.ones(h.shape[0], h.shape[1], 1, device=h.device, dtype=h.dtype)
@@ -633,7 +658,17 @@ class LoopedQwen3(nn.Module):
                 if alive is not None:
                     delta = delta * alive
 
+                if cfg.transport == "rotate":
+                    # h_t = R h_{t-1} + step: computed on the unrotated state, the
+                    # rotation is pure transport
+                    h = self._pair_rotate(h, self.stream_cos, self.stream_sin)
                 h, vel, prev, step = self._apply_update(h, delta, vel, prev, t)
+                if cfg.carrier_dim > 0:
+                    g = self.carrier_gate[min(t, cfg.max_loops - 1)]
+                    cw = self.carrier_down(h)
+                    if cfg.carrier_rotate:
+                        carrier = self._pair_rotate(carrier, self.carrier_cos, self.carrier_sin)
+                    carrier = carrier + g * cw
                 if alive is not None and (t + 1) >= cfg.token_exit_min_t:
                     with torch.no_grad():
                         rel = (step.float().pow(2).sum(-1, keepdim=True).sqrt()
@@ -665,7 +700,10 @@ class LoopedQwen3(nn.Module):
                             dim=-1).mean().item())
                     prev_delta, prev_step = delta, step
 
-        res: Dict = {"hidden": self._readout(states, h)}
+        # With a carrier the head reads ONLY the accumulator: the input-to-head
+        # path exists solely through the per-step writes.
+        hidden = self.carrier_up(carrier) if cfg.carrier_dim > 0 else self._readout(states, h)
+        res: Dict = {"hidden": hidden}
         if keep_traj:
             res["traj"] = states
         if collect_stats:
@@ -687,6 +725,12 @@ class LoopedQwen3(nn.Module):
             raise ValueError(cfg.noise_schedule)
         rms = h.float().pow(2).mean(-1, keepdim=True).sqrt().to(h.dtype)
         return torch.randn_like(h) * (cfg.noise_std * s) * rms
+
+    @staticmethod
+    def _pair_rotate(x, cosb, sinb):
+        x1, x2 = x.chunk(2, dim=-1)
+        c = cosb.to(x.dtype); s = sinb.to(x.dtype)
+        return torch.cat((x1 * c - x2 * s, x1 * s + x2 * c), dim=-1)
 
     @staticmethod
     def _project_off(x, d):

@@ -251,7 +251,10 @@ def train(mc: ModelConfig, tc: TrainConfig, depth_sweep: Optional[List[int]] = N
     summary = {"event": "final", "run": tc.run_name,
                "machine": {"gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu",
                            "torch": torch.__version__, "compiled": bool(tc.compile),
-                           "attn_gqa_mode": mc.attn_gqa_mode}, "params": n_par, "params_non_emb": n_par_ne,
+                           "attn_gqa_mode": mc.attn_gqa_mode,
+                           # concurrent workers on the same GPU: aggregate throughput
+                           # goes up but per-run wall_seconds stops being comparable
+                           "concurrency": int(os.environ.get("LOOPEDLM_CONCURRENCY", 1))}, "params": n_par, "params_non_emb": n_par_ne,
                "train_tokens": tok_seen, "train_tokens_planned": steps * tokens_per_step, "wall_seconds": round(time.time() - t0, 1),
                "fwd_flops_per_token": fwd_flops,
                "train_flops_est": 3 * fwd_flops * steps * tokens_per_step,

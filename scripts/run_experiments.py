@@ -82,6 +82,11 @@ def main():
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry_run", action="store_true")
     ap.add_argument("--no_board", action="store_true")
+    ap.add_argument("--shard", default=None,
+                    help="i/N: take every Nth config starting at i.  The model is "
+                         "dispatch-bound, so several concurrent workers raise "
+                         "aggregate throughput 1.8x (measured) even though each one "
+                         "gets slower; per-run wall_seconds is then not comparable.")
     ap.add_argument("--mlflow", default=os.environ.get("MLFLOW_TRACKING_URI", ""))
     a = ap.parse_args()
 
@@ -105,6 +110,11 @@ def main():
     # is worse than no preview.
     seeds = [int(s) for s in a.seeds.split(",")] if a.seeds else [None]
     queue = [(n, s) for n in queue for s in seeds]
+
+    if a.shard:
+        i, n_sh = (int(x) for x in a.shard.split("/"))
+        queue = queue[i::n_sh]
+        print(f"shard {i}/{n_sh}: {len(queue)} of the configs", flush=True)
 
     total_est = sum(est(n, a.tokens or resolve(n)[1]["total_tokens"], a.tok_s)
                     for n, _ in queue)

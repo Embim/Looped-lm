@@ -423,7 +423,12 @@ class LoopedQwen3(nn.Module):
             h = torch.randn_like(h) * cfg.state_init_std
 
         vel = torch.zeros_like(h) if cfg.momentum else None
-        keep_traj = collect_states or cfg.readout != "last" or cfg.halting != "none"
+        # Deep supervision and the halting head read the per-step states, so the
+        # trajectory has to be kept for them too -- without this the auxiliary
+        # losses silently do nothing (they see an empty trajectory) and a whole
+        # ablation group would have looked like "no effect".
+        keep_traj = (collect_states or cfg.readout != "last" or cfg.halting != "none"
+                     or cfg.deep_supervision != "none")
         states: List[torch.Tensor] = [h] if keep_traj else []
         stats = {"delta_rms": [], "state_rms": [], "cos_prev": []} if collect_stats else None
         prev_delta = None

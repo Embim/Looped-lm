@@ -108,8 +108,14 @@ add("H_coda", {"n_core": 1, "n_coda": 1})
 # --- I. supervision of the intermediate steps -------------------------------
 add("I_deepsup_k2", {"deep_supervision": "random_k", "deep_sup_k": 2})
 add("I_deepsup_all", {"deep_supervision": "all", "deep_sup_weight": 0.2})
+# Self-distillation across depth.  KL(step_t || final) is ~1e-4 at initialisation
+# (an untrained head barely differs between steps) and grows as the steps
+# differentiate, so unlike the CE variant its weight has to be set for the
+# converged regime, not the initial one -- hence two weights.
 add("I_deepsup_kl", {"deep_supervision": "random_k", "deep_sup_k": 2,
-                     "deep_sup_detach_teacher": True})
+                     "deep_sup_detach_teacher": True, "deep_sup_weight": 1.0})
+add("I_deepsup_kl_strong", {"deep_supervision": "random_k", "deep_sup_k": 2,
+                            "deep_sup_detach_teacher": True, "deep_sup_weight": 10.0})
 add("I_ponder", {"halting": "ponder", "deep_supervision": "random_k", "deep_sup_k": 2})
 
 # --- J. exploration inside the loop ----------------------------------------

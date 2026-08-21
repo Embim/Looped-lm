@@ -25,8 +25,14 @@ def logits_at(model, state: torch.Tensor, cos, sin, pos: Optional[torch.Tensor])
 
 
 def _pick_steps(n_states: int, cfg: ModelConfig, gen: torch.Generator) -> List[int]:
-    # states are h_0..h_T; never supervise h_0 (it carries no computation)
-    cand = list(range(1, n_states))
+    # States are h_0..h_T.  h_0 carries no computation, so it is never supervised.
+    # h_T is excluded when the read-out is the last state: it is already the main
+    # CE target, and for the self-distillation variant it *is* the teacher, so
+    # picking it would spend one of the k slots on a guaranteed zero.
+    last = n_states - 1 if cfg.readout == "last" else n_states
+    cand = list(range(1, last))
+    if not cand:
+        cand = list(range(1, n_states))
     if cfg.deep_supervision == "all":
         return cand
     k = min(cfg.deep_sup_k, len(cand))

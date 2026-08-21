@@ -101,17 +101,20 @@ def main():
             seen.add(n); queue.append(n)
 
     RESULTS.mkdir(exist_ok=True)
+    # Expand seeds before printing the plan: a preview that under-reports the queue
+    # is worse than no preview.
+    seeds = [int(s) for s in a.seeds.split(",")] if a.seeds else [None]
+    queue = [(n, s) for n in queue for s in seeds]
+
     total_est = sum(est(n, a.tokens or resolve(n)[1]["total_tokens"], a.tok_s)
-                    for n in queue)
+                    for n, _ in queue)
     print(f"{len(queue)} runs, estimated {total_est/60:.1f} h total\n", flush=True)
-    for n in queue:
-        print(f"  {n:24s} ~{est(n, a.tokens or resolve(n)[1]['total_tokens'], a.tok_s):5.1f} min",
+    for n, s in queue:
+        label = n + (f" (seed {s})" if s is not None else "")
+        print(f"  {label:32s} ~{est(n, a.tokens or resolve(n)[1]['total_tokens'], a.tok_s):5.1f} min",
               flush=True)
     if a.dry_run:
         return
-
-    seeds = [int(s) for s in a.seeds.split(",")] if a.seeds else [None]
-    queue = [(n, s) for n in queue for s in seeds]
 
     done, failed = [], []
     for i, (name, seed) in enumerate(queue, 1):

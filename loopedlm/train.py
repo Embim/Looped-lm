@@ -163,6 +163,11 @@ def train(mc: ModelConfig, tc: TrainConfig, depth_sweep: Optional[List[int]] = N
     best = {"val_loss": float("inf")}
     t0 = time.time()
     tok_seen = 0
+    # Rate over the last logging window, not tokens-since-start / time-since-start:
+    # the cumulative form includes startup and warm-up, so it climbs through the
+    # run (49k -> 152k tok/s in one 2M-token run) and is not a throughput anyone
+    # should plan from.  Board reservations use the benchmarked median step time.
+    win_t, win_tok = t0, 0
     for step in range(steps):
         lr = lr_at(step, steps, tc) * lr_mult
         for g in opt.param_groups:
@@ -185,10 +190,14 @@ def train(mc: ModelConfig, tc: TrainConfig, depth_sweep: Optional[List[int]] = N
 
         if step % tc.log_every == 0 or step == steps - 1:
             rec = {"event": "train", "step": step, "tokens": tok_seen, "lr": lr, "T": T,
-                   "gnorm": float(gnorm), "elapsed": round(time.time() - t0, 1), **logs_acc}
+                   "gnorm": float(gnorm), "elapsed": round(time.time() - t0, 1),
+                   "tok_per_s_window": round((tok_seen - win_tok) / max(time.time() - win_t, 1e-9), 1),
+                   **logs_acc}
             logf.write(json.dumps(rec) + "\n"); logf.flush()
             if step % (tc.log_every * 10) == 0 or step == steps - 1:
-                tps = tok_seen / max(time.time() - t0, 1e-9)
+                now = time.time()
+                tps = (tok_seen - win_tok) / max(now - win_t, 1e-9)
+                win_t, win_tok = now, tok_seen
                 print(f"  step {step:5d}/{steps} loss {logs_acc.get('ce', 0):.4f} "
                       f"lr {lr:.2e} T={T} |g|={float(gnorm):.2f} {tps/1e3:.1f}k tok/s", flush=True)
 

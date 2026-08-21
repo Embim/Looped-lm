@@ -30,6 +30,10 @@ from pathlib import Path
 BOARD_CLI = Path(os.environ.get("BOARD_CLI", r"C:\ml\gpu_board\gpu_board.py"))
 OWNER = os.environ.get("BOARD_OWNER", "looped-lm (chat-1)")
 HEARTBEAT_S = 120
+# A contended card means waiting for hours is normal; poll rarely so the box stays
+# quiet for whoever is measuring wall-clock on it.
+WAIT_TIMEOUT_S = int(os.environ.get("BOARD_WAIT_TIMEOUT", 10800))
+POLL_S = int(os.environ.get("BOARD_POLL", 60))
 
 
 def _call(args, timeout=60):
@@ -48,7 +52,7 @@ def release(owner: str = OWNER) -> None:
 
 @contextmanager
 def hold_gpu(note: str, minutes: int = 30, owner: str = OWNER, exclusive: bool = True,
-             wait: bool = True, wait_timeout: int = 10800, poll: int = 60,
+             wait: bool = True, wait_timeout: int = WAIT_TIMEOUT_S, poll: int = POLL_S,
              vram: float = 0.0, ram: float = 0.0, cpu: float = 0.0):
     """Hold the GPU for the duration of the block, extending the booking as needed."""
     args = ["--owner", owner, "--minutes", str(int(minutes)), "--note", note]

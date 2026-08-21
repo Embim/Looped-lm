@@ -131,9 +131,21 @@ add("K_bptt8_T32", {"n_loops": 32, "bptt_last_k": 8})
 add("K_bptt8_T64", {"n_loops": 64, "bptt_last_k": 8})
 add("K_bptt4_T64", {"n_loops": 64, "bptt_last_k": 4})
 
+# When the card is contended, run this order rather than the full 59: the
+# saturation curve first (it is the baseline everything else is measured against),
+# then the cheapest decisive test of the LR confound, then one representative of
+# each mechanism family, then the rest of each family.
+CORE: List[str] = [
+    "A_depth1", "A_depth4", "A_depth16", "A_depth32",
+    "B_lr0.003_T32", "B_lr0.0005_T32", "B_initscale_T32",
+    "C_adaln", "C_depth_rope", "D_normalized", "D_momentum_read",
+    "E_pool_gate", "F_depth_attn", "K_uniform_T", "K_bptt8_T64",
+]
+
 GROUPS: Dict[str, List[str]] = {}
 for _k in P:
     GROUPS.setdefault(_k.split("_")[0], []).append(_k)
+GROUPS["CORE"] = CORE
 
 
 def resolve(name: str, model_over: Dict | None = None, train_over: Dict | None = None):

@@ -12,10 +12,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-PATTERNS = ("scripts\train.py", "scripts/train.py", "run_experiments", "bench_", "loopedlm")
+PATTERNS = (r"scripts\train.py", "scripts/train.py", "run_experiments", "bench_", "loopedlm")
 BOARD = Path(r"C:\ml\gpu_board\gpu_board.py")
 OWNER = "looped-lm (chat-1)"
-PS = ("Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+# PowerShell writes its output in the console code page, so a command line holding
+# the (Cyrillic) project path raised UnicodeDecodeError and this script reported
+# "0 processes" while a run was still on the GPU.  Force UTF-8 out, be permissive in.
+PS = ("[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+      "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
       "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")
 
 
@@ -24,12 +28,20 @@ def main():
     ap.add_argument("--dry_run", action="store_true")
     a = ap.parse_args()
     import json
-    out = subprocess.run(["powershell", "-NoProfile", "-Command", PS],
-                         capture_output=True, text=True).stdout
-    procs = json.loads(out or "[]")
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", PS],
+                       capture_output=True, encoding="utf-8", errors="replace")
+    out = (r.stdout or "").strip()
+    if not out:
+        raise SystemExit(f"could not list processes: {(r.stderr or '')[:200]}")
+    procs = json.loads(out)
     if isinstance(procs, dict):
         procs = [procs]
     me = str(Path(__file__).resolve().parents[1]).lower()
+    # Same discipline as ${VAR:?} in a shell rm path: if the discriminator is
+    # empty or implausibly short, every python process would match and get
+    # killed.  Refuse instead of widening the blast radius.
+    if len(me) < 12:
+        raise SystemExit(f"refusing to match on a too-short project path: {me!r}")
     killed = 0
     for p in procs:
         cmd = (p.get("CommandLine") or "")

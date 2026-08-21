@@ -190,6 +190,82 @@ class DepthAttention(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# non-Euclidean state geometries
+#
+# The residual stream is a flat vector space and the update is addition, which is
+# exactly what degenerates: the measured failure mode is a straight-line drift with
+# a linearly growing norm.  These replace the geometry rather than tune the step.
+# All of them are parameter-free apart from one learned step size per loop.
+# ---------------------------------------------------------------------------
+def geodesic_step(h, delta, angle):
+    """Rotate h towards delta along the great circle through them.
+
+    An exact rotation of the sphere: the norm is preserved algebraically rather
+    than restored by a normalisation afterwards, and the state moves by a definite
+    angle per loop, so "how far the loop travelled" is a bounded, interpretable
+    quantity instead of a norm that grows without limit.
+    """
+    hn = h / h.float().pow(2).sum(-1, keepdim=True).add(1e-12).sqrt().to(h.dtype)
+    d = delta - (delta * hn).sum(-1, keepdim=True) * hn          # tangent component
+    dn = d / d.float().pow(2).sum(-1, keepdim=True).add(1e-12).sqrt().to(d.dtype)
+    r = h.float().pow(2).sum(-1, keepdim=True).add(1e-12).sqrt().to(h.dtype)
+    c, s = torch.cos(angle), torch.sin(angle)
+    return r * (c * hn + s * dn)
+
+
+def phase_step(h, delta, scale):
+    """Treat the state as d/2 unit complex numbers and rotate each one's phase.
+
+    The state lives on a torus, so no coordinate can grow and no drift is possible:
+    the loop can only redistribute phase.  The reachable set is exponentially large
+    in d while the norm is constant by construction, which is the opposite of a
+    trajectory that spends its steps getting longer.
+    """
+    re, im = h.chunk(2, dim=-1)
+    phi = scale * torch.tanh(delta.chunk(2, dim=-1)[0].float()).to(h.dtype)
+    c, s = torch.cos(phi), torch.sin(phi)
+    return torch.cat((re * c - im * s, re * s + im * c), dim=-1)
+
+
+def mobius_add(x, y, c: float):
+    """Addition in the Poincare ball of curvature -c."""
+    x2 = x.pow(2).sum(-1, keepdim=True)
+    y2 = y.pow(2).sum(-1, keepdim=True)
+    xy = (x * y).sum(-1, keepdim=True)
+    num = (1 + 2 * c * xy + c * y2) * x + (1 - c * x2) * y
+    den = 1 + 2 * c * xy + (c ** 2) * x2 * y2
+    return num / den.clamp_min(1e-9)
+
+
+def poincare_exp(h, v, c: float, max_norm: float = 0.999):
+    """Move from h along the tangent vector v, staying inside the ball.
+
+    Hyperbolic volume grows exponentially with radius, so steps of a fixed
+    hyperbolic length keep reaching genuinely new territory instead of retracing a
+    direction -- the property the Euclidean loop loses.  Language is also
+    hierarchical, and negatively curved space embeds hierarchies with low
+    distortion, so this is not only a fix for the pathology.
+    """
+    h = h.float(); v = v.float()
+    h2 = h.pow(2).sum(-1, keepdim=True).clamp(0, max_norm ** 2 / c)
+    lam = 2.0 / (1.0 - c * h2).clamp_min(1e-6)          # conformal factor at h
+    vn = v.pow(2).sum(-1, keepdim=True).add(1e-12).sqrt()
+    step = torch.tanh((c ** 0.5) * lam * vn / 2) * v / ((c ** 0.5) * vn)
+    out = mobius_add(h, step, c)
+    n = out.pow(2).sum(-1, keepdim=True).add(1e-12).sqrt()
+    scale = (max_norm / (c ** 0.5)) / n
+    return torch.where(n > max_norm / (c ** 0.5), out * scale, out)
+
+
+def poincare_log0(h, c: float):
+    """Tangent coordinates at the origin: an unbounded, well-conditioned view of the
+    ball for the block to read (feeding raw ball coordinates would let RMSNorm
+    destroy the radius, which is what carries the hierarchy depth)."""
+    n = h.float().pow(2).sum(-1, keepdim=True).add(1e-12).sqrt()
+    return (torch.atanh((c ** 0.5) * n.clamp(max=0.999)) / ((c ** 0.5) * n)) * h.float()
+
+
+# ---------------------------------------------------------------------------
 # the model
 # ---------------------------------------------------------------------------
 class LoopedQwen3(nn.Module):
@@ -231,7 +307,8 @@ class LoopedQwen3(nn.Module):
 
         # ---- update rule ----
         a0 = cfg.update_alpha_init if cfg.update_alpha_init > 0 else 1.0 / math.sqrt(cfg.n_loops)
-        if cfg.update in ("gated", "normalized", "sphere", "orthogonal", "orthogonal_sphere"):
+        if cfg.update in ("gated", "normalized", "sphere", "orthogonal", "orthogonal_sphere",
+                          "geodesic", "phase", "hyperbolic"):
             self.step_alpha = nn.Parameter(torch.full((T,), float(a0)))
         if cfg.momentum and cfg.momentum_learn_beta:
             b = min(max(cfg.momentum_beta, 1e-3), 1 - 1e-3)
@@ -373,6 +450,11 @@ class LoopedQwen3(nn.Module):
         """One loop iteration.  Returns the update `delta` (not the new state)."""
         cfg = self.cfg
         x = h
+        if cfg.update == "hyperbolic":
+            # Raw ball coordinates have |h| < 1 and RMSNorm inside the block would
+            # erase the radius, which is exactly what carries hierarchy depth in
+            # hyperbolic space.  The tangent view at the origin is unbounded.
+            x = poincare_log0(x, cfg.curvature).to(h.dtype)
 
         # --- input re-injection ---
         if cfg.inject_input == "add":
@@ -590,9 +672,22 @@ class LoopedQwen3(nn.Module):
     def _apply_update(self, h, delta, vel, prev, t):
         cfg = self.cfg
         ORTHO = ("orthogonal", "orthogonal_sphere")
+        GEOM = ("geodesic", "phase", "hyperbolic")
         a = None
-        if cfg.update in ("gated", "normalized", "sphere") + ORTHO:
+        if cfg.update in ("gated", "normalized", "sphere") + ORTHO + GEOM:
             a = self.step_alpha[min(t, cfg.max_loops - 1)]
+
+        if cfg.update in GEOM:
+            # A curved or compact state space: the update is a motion of the manifold,
+            # not a vector addition, so an unbounded straight-line drift is not one of
+            # the available behaviours.
+            if cfg.update == "geodesic":
+                h = geodesic_step(h, delta, a)
+            elif cfg.update == "phase":
+                h = phase_step(h, delta, a)
+            else:
+                h = poincare_exp(h, a * delta.float(), cfg.curvature).to(delta.dtype)
+            return h, vel, prev, delta
 
         if cfg.update == "residual":
             step = delta

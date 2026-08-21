@@ -56,7 +56,9 @@ def test_causality(device):
                {"depth_cond": "depth_rope"}, {"attn_window_schedule": "local2global"},
                {"update": "normalized", "momentum": True, "momentum_read": True},
                {"update": "orthogonal"}, {"update": "orthogonal_sphere"},
-               {"n_chains": 3}, {"n_chains": 3, "chain_combine": "gate"}):
+               {"n_chains": 3}, {"n_chains": 3, "chain_combine": "gate"},
+               {"update": "geodesic"}, {"update": "phase"},
+               {"update": "hyperbolic", "state_init": "zeros"}):
         torch.manual_seed(0)
         m = LoopedQwen3(small(**kw)).to(device).eval()
         x = torch.randint(0, 256, (2, 16), device=device)
@@ -129,6 +131,42 @@ def test_orthogonal_updates(device):
           max(st["state_rms"]) / min(st["state_rms"]) < 1.05 and min(st["cos_prev"]) > 0.5,
           f"|h| ratio {max(st['state_rms'])/min(st['state_rms']):.3f}, "
           f"min cos {min(st['cos_prev']):+.3f}")
+
+
+def test_geometries(device):
+    """Each non-flat geometry must hold its own invariant and stay finite."""
+    x = torch.randint(0, 256, (2, 16), device=device)
+
+    m = LoopedQwen3(small(n_loops=10, max_loops=12, update="geodesic")).to(device).eval()
+    with torch.no_grad():
+        st = m(x, collect_stats=True)["stats"]
+    drift = max(st["state_rms"]) / min(st["state_rms"])
+    check("geodesic preserves the norm exactly", drift < 1.001, f"max/min |h| = {drift:.6f}")
+
+    m = LoopedQwen3(small(n_loops=10, max_loops=12, update="phase")).to(device).eval()
+    with torch.no_grad():
+        o = m(x, collect_states=True, collect_stats=True)
+    tr = torch.stack(o["traj"])                       # [T+1,B,S,d]
+    re, im = tr.chunk(2, dim=-1)
+    mod = (re ** 2 + im ** 2).sqrt()                  # per-coordinate modulus
+    spread = (mod.amax(0) - mod.amin(0)).max().item()
+    check("phase preserves every coordinate modulus", spread < 1e-4,
+          f"max drift of |z_j| across steps = {spread:.2e}")
+
+    mc = small(n_loops=10, max_loops=12, update="hyperbolic", state_init="zeros")
+    m = LoopedQwen3(mc).to(device).eval()
+    with torch.no_grad():
+        o = m(x, collect_states=True)
+    r = torch.stack(o["traj"]).float().pow(2).sum(-1).sqrt()
+    check("hyperbolic stays strictly inside the ball",
+          bool((r < 1.0 / mc.curvature ** 0.5).all()) and torch.isfinite(r).all(),
+          f"max radius {float(r.max()):.4f} of {1.0/mc.curvature**0.5:.2f}")
+    m.train()
+    loss = m.head(m(x)["hidden"]).float().logsumexp(-1).mean()
+    loss.backward()
+    gn = sum(float(p.grad.pow(2).sum()) for p in m.parameters() if p.grad is not None) ** 0.5
+    check("hyperbolic gradients are finite and non-zero", math.isfinite(gn) and gn > 0,
+          f"|g| = {gn:.4f}")
 
 
 def test_chains(device):
@@ -448,6 +486,7 @@ def main():
     test_loop_count_effect(device)
     test_orthogonal_updates(device)
     test_chains(device)
+    test_geometries(device)
     print("\ngradients")
     test_bptt_equivalence(device)
     print("\nbudgets")

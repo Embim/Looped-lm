@@ -47,7 +47,11 @@ class ModelConfig:
     #                       the sphere) and renormalise, so the norm cannot grow
     #                       either: the trajectory is forced to turn every step
     update: str = "residual"
+    #   geodesic   - exact rotation of the sphere towards the block's direction
+    #   phase      - state as d/2 unit complex numbers, the loop rotates phases
+    #   hyperbolic - state in the Poincare ball, the loop moves along geodesics
     update_alpha_init: float = -1.0  # <0 -> 1/sqrt(n_loops)
+    curvature: float = 1.0           # -c curvature of the ball, for update=hyperbolic
     momentum: bool = False           # heavy-ball on the residual stream
     momentum_beta: float = 0.9
     momentum_learn_beta: bool = True

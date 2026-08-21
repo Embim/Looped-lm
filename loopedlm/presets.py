@@ -131,6 +131,38 @@ add("K_bptt8_T32", {"n_loops": 32, "bptt_last_k": 8})
 add("K_bptt8_T64", {"n_loops": 64, "bptt_last_k": 8})
 add("K_bptt4_T64", {"n_loops": 64, "bptt_last_k": 4})
 
+# --- N. the state does not have to live in a flat space ---------------------
+# The residual stream is a flat vector space and the update is addition, which is
+# precisely what degenerates into a straight-line drift.  These change the geometry
+# instead of the step size, and each is parameter-free apart from one learned angle
+# or step length per loop.
+#
+#   geodesic   - exact rotation of the sphere towards the block's direction.  The
+#                norm is preserved algebraically, and "distance travelled" becomes a
+#                bounded angle rather than an unbounded norm.
+#   phase      - the state is d/2 unit complex numbers and the loop rotates their
+#                phases.  On a torus nothing can grow and no drift exists; the loop
+#                can only redistribute phase, over an exponentially large reachable
+#                set.
+#   hyperbolic - the state lives in the Poincare ball.  Volume grows exponentially
+#                with radius, so steps of fixed hyperbolic length keep reaching new
+#                territory instead of retracing a direction -- and negatively curved
+#                space embeds hierarchies with low distortion, which language has.
+add("N_geodesic_T8", {"n_loops": 8, "update": "geodesic"})
+add("N_geodesic_T32", {"n_loops": 32, "update": "geodesic"})
+add("N_geodesic_T64", {"n_loops": 64, "update": "geodesic"})
+add("N_phase_T8", {"n_loops": 8, "update": "phase"})
+add("N_phase_T32", {"n_loops": 32, "update": "phase"})
+add("N_hyper_T8", {"n_loops": 8, "update": "hyperbolic", "state_init": "zeros"})
+add("N_hyper_T32", {"n_loops": 32, "update": "hyperbolic", "state_init": "zeros"})
+add("N_hyper_T32_c025", {"n_loops": 32, "update": "hyperbolic", "state_init": "zeros",
+                         "curvature": 0.25})
+add("N_hyper_T64", {"n_loops": 64, "update": "hyperbolic", "state_init": "zeros"})
+add("N_geodesic_uniform", {"loop_sampling": "uniform", "loop_min": 1, "n_loops": 32,
+                           "update": "geodesic"})
+add("N_geodesic_chains", {"n_chains": 4, "n_loops": 8, "update": "geodesic"})
+add("N_geodesic_pool", {"n_loops": 32, "update": "geodesic", "readout": "pool_gate"})
+
 # --- R. radical departures, all compute-matched to the naive T=32 run -------
 # Naive looping peaks at T=8 (4.2028) and T=32 is worse (4.2880), while the
 # trajectory diagnostics say the loop loses dimensionality rather than motion.

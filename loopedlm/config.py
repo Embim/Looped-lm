@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, asdict, field, fields
 from typing import Optional
 
@@ -104,11 +105,17 @@ class ModelConfig:
         return cls(**d)
 
 
+# Paths come from the environment so the same code runs unchanged on the Windows
+# box and on a rented Linux GPU.
+_OUT_DIR = os.environ.get("LOOPEDLM_OUT", r"C:\ml\looped-lm\runs")
+_DATA_DIR = os.environ.get("LOOPEDLM_DATA", r"C:\ml\looped-lm\data\tok8192")
+
+
 @dataclass
 class TrainConfig:
     run_name: str = "dev"
-    out_dir: str = r"C:\ml\looped-lm\runs"
-    data_dir: str = r"C:\ml\looped-lm\data\tok8192"
+    out_dir: str = _OUT_DIR
+    data_dir: str = _DATA_DIR
 
     total_tokens: int = 100_000_000   # hard budget of *training* tokens
     seq_len: int = 512

@@ -136,6 +136,13 @@ def train(mc: ModelConfig, tc: TrainConfig, depth_sweep: Optional[List[int]] = N
     logf = (run_dir / "log.jsonl").open("w", encoding="utf-8")
 
     model = LoopedQwen3(mc).to(device)
+    if tc.compile:
+        # Compile the shared block, not the whole model: one graph is then reused
+        # for all T iterations, and the loop machinery (depth rotation, momentum,
+        # read-out) stays eager so a variable loop count causes no recompilation.
+        # Measured 2.5x on an A100; unavailable on Windows (no Triton).
+        for blk in list(model.core) + list(model.prelude) + list(model.coda):
+            blk.forward = torch.compile(blk.forward, dynamic=False)
     opt = build_optimizer(model, tc)
     lr_mult = 1.0 / math.sqrt(mc.n_loops) if tc.lr_scale_with_loops == "inv_sqrt" else 1.0
 
@@ -241,7 +248,10 @@ def train(mc: ModelConfig, tc: TrainConfig, depth_sweep: Optional[List[int]] = N
     # y.numel() per micro-batch, so this catches a data stream that quietly ran
     # short or a window layout that double-counts.
     assert tok_seen == steps * tokens_per_step, (tok_seen, steps * tokens_per_step)
-    summary = {"event": "final", "run": tc.run_name, "params": n_par, "params_non_emb": n_par_ne,
+    summary = {"event": "final", "run": tc.run_name,
+               "machine": {"gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu",
+                           "torch": torch.__version__, "compiled": bool(tc.compile),
+                           "attn_gqa_mode": mc.attn_gqa_mode}, "params": n_par, "params_non_emb": n_par_ne,
                "train_tokens": tok_seen, "train_tokens_planned": steps * tokens_per_step, "wall_seconds": round(time.time() - t0, 1),
                "fwd_flops_per_token": fwd_flops,
                "train_flops_est": 3 * fwd_flops * steps * tokens_per_step,

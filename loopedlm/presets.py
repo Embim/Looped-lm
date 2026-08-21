@@ -131,6 +131,25 @@ add("K_bptt8_T32", {"n_loops": 32, "bptt_last_k": 8})
 add("K_bptt8_T64", {"n_loops": 64, "bptt_last_k": 8})
 add("K_bptt4_T64", {"n_loops": 64, "bptt_last_k": 4})
 
+# --- L. combinations suggested by the measured failure mode -----------------
+# Diagnosis on A_depth16: updates do NOT decay (RMS ~1.13, no fixed point) but
+# become collinear -- cos(delta_t, delta_{t-1}) reaches 0.999 by t=16 -- while the
+# state norm grows linearly. The loop loses dimensionality rather than motion, so
+# the interesting combinations are the ones that force each step into a new
+# direction and stop the norm from growing.
+add("L_decorr0.05", {"decorr_weight": 0.05})
+add("L_decorr0.1", {"decorr_weight": 0.1})
+add("L_decorr_norm", {"decorr_weight": 0.05, "update": "normalized"})
+add("L_decorr_sphere", {"decorr_weight": 0.05, "update": "sphere"})
+add("L_decorr_drope", {"decorr_weight": 0.05, "depth_cond": "depth_rope"})
+add("L_norm_drope", {"update": "normalized", "depth_cond": "depth_rope"})
+add("L_sphere_adaln", {"update": "sphere", "depth_cond": "adaln"})
+add("L_pool_norm", {"readout": "pool_gate", "update": "normalized"})
+add("L_uniform_drope", {"loop_sampling": "uniform", "loop_min": 1, "n_loops": 32,
+                        "depth_cond": "depth_rope"})
+add("L_uniform_norm_decorr", {"loop_sampling": "uniform", "loop_min": 1, "n_loops": 32,
+                              "update": "normalized", "decorr_weight": 0.05})
+
 # When the card is contended, run this order rather than the full 59: the
 # saturation curve first (it is the baseline everything else is measured against),
 # then the cheapest decisive test of the LR confound, then one representative of

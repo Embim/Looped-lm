@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+# data, checkpoints and run logs live outside the repo (C:\ml\looped-lm)
+data/
+runs/
+*.bin
+*.pt
+*.safetensors
+report/figures/*.pdf
+.DS_Store

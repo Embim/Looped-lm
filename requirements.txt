@@ -1,0 +1,9 @@
+torch>=2.6
+tokenizers>=0.20
+pyarrow>=15
+numpy>=1.26
+matplotlib>=3.8
+huggingface_hub>=0.25
+safetensors>=0.4
+# optional: mirrors metrics to a shared MLflow instance; local JSONL is the source of truth
+mlflow-skinny

@@ -1,0 +1,2 @@
+run,params,params_non_emb,train_tokens,T_train,T_eval,val_loss,val_ppl,val_bpb,fwd_gflops_per_token,train_pflops,minutes,best_T,best_loss
+A_depth1,9440513,5246209,24985600,1,1,4.5095,90.874,1.7295,0.02,1.49,3.1,1,4.519

@@ -1,0 +1,172 @@
+{
+  "event": "final",
+  "run": "A_depth1",
+  "params": 9440513,
+  "params_non_emb": 5246209,
+  "train_tokens": 24985600,
+  "wall_seconds": 184.4,
+  "fwd_flops_per_token": 19922944.0,
+  "train_flops_est": 1493360128819200.0,
+  "best_periodic": {
+    "val_loss": 4.519015167580276,
+    "val_ppl": 91.74519982480562,
+    "val_bpb": 1.7331928179227596,
+    "step": 1524
+  },
+  "final": {
+    "n_loops": 1,
+    "val_loss": 4.50947627278625,
+    "val_ppl": 90.87421274715699,
+    "val_bpb": 1.7295343340861629,
+    "eval_tokens": 3997696,
+    "per_step_loss": [
+      24.49075746536255,
+      4.50947627278625
+    ],
+    "per_step_ppl": [
+      43271387871.997536,
+      90.87421274715699
+    ],
+    "stats": {
+      "delta_rms": [
+        4.1273295224690045
+      ],
+      "state_rms": [
+        4.148639842135007
+      ]
+    }
+  },
+  "depth_sweep": {
+    "1": {
+      "val_loss": 4.519015167580276,
+      "val_ppl": 91.74519982480562,
+      "val_bpb": 1.7331928179227596
+    },
+    "2": {
+      "val_loss": 5.1642754703271585,
+      "val_ppl": 174.91068467047597,
+      "val_bpb": 1.9806716337574035
+    },
+    "4": {
+      "val_loss": 6.817352994543607,
+      "val_ppl": 913.5635989195981,
+      "val_bpb": 2.6146819183423995
+    },
+    "8": {
+      "val_loss": 7.823923423642018,
+      "val_ppl": 2499.693550748079,
+      "val_bpb": 3.000735200695275
+    },
+    "12": {
+      "val_loss": 8.128501282363642,
+      "val_ppl": 3389.7155298794546,
+      "val_bpb": 3.117550953167572
+    },
+    "16": {
+      "val_loss": 8.277509454820978,
+      "val_ppl": 3934.383410082821,
+      "val_bpb": 3.174700549869
+    },
+    "24": {
+      "val_loss": 8.430041872087072,
+      "val_ppl": 4582.691975821377,
+      "val_bpb": 3.2332018118259387
+    },
+    "32": {
+      "val_loss": 8.511382904209075,
+      "val_ppl": 4971.032799334901,
+      "val_bpb": 3.2643988066242033
+    },
+    "48": {
+      "val_loss": 8.601479592870493,
+      "val_ppl": 5439.70218458387,
+      "val_bpb": 3.298953887303476
+    },
+    "64": {
+      "val_loss": 8.653227493411205,
+      "val_ppl": 5728.605967217188,
+      "val_bpb": 3.318800930571482
+    }
+  },
+  "model": {
+    "vocab_size": 8192,
+    "max_seq_len": 512,
+    "d_model": 512,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "head_dim": 64,
+    "intermediate_size": 1280,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "attn_gqa_mode": "repeat",
+    "tie_embeddings": true,
+    "embed_norm": true,
+    "n_prelude": 0,
+    "n_core": 2,
+    "n_coda": 0,
+    "n_loops": 1,
+    "max_loops": 64,
+    "state_init": "embed",
+    "state_init_std": 0.4,
+    "inject_input": "add",
+    "update": "residual",
+    "update_alpha_init": -1.0,
+    "momentum": false,
+    "momentum_beta": 0.9,
+    "momentum_learn_beta": true,
+    "momentum_read": false,
+    "depth_cond": "none",
+    "depth_rope_frac": 0.25,
+    "depth_rope_theta": 1000.0,
+    "attn_window_schedule": "none",
+    "loop_memory": "none",
+    "depth_attn_dim": 64,
+    "readout": "last",
+    "noise_std": 0.0,
+    "noise_schedule": "const",
+    "loop_dropout": 0.0,
+    "loop_sampling": "fixed",
+    "loop_min": 1,
+    "bptt_last_k": 0,
+    "grad_ckpt": true,
+    "deep_supervision": "none",
+    "deep_sup_k": 2,
+    "deep_sup_weight": 0.3,
+    "deep_sup_pos_frac": 0.25,
+    "deep_sup_detach_teacher": false,
+    "halting": "none",
+    "halting_weight": 0.01,
+    "halting_target_loops": 8.0,
+    "decorr_weight": 0.0,
+    "init_residual_scale": "one"
+  },
+  "train": {
+    "run_name": "A_depth1",
+    "out_dir": "C:\\ml\\looped-lm\\runs",
+    "data_dir": "C:\\ml\\looped-lm\\data\\tok8192",
+    "total_tokens": 25000000,
+    "seq_len": 512,
+    "micro_batch": 32,
+    "grad_accum": 1,
+    "lr": 0.0015,
+    "min_lr_frac": 0.05,
+    "warmup_frac": 0.03,
+    "schedule": "cosine",
+    "wsd_decay_frac": 0.2,
+    "weight_decay": 0.1,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "grad_clip": 1.0,
+    "lr_scale_with_loops": "none",
+    "param_budget": 10000000,
+    "seed": 1337,
+    "dtype": "bfloat16",
+    "compile": false,
+    "eval_every": 250,
+    "eval_tokens": 2000000,
+    "final_eval_tokens": 4000000,
+    "log_every": 25,
+    "save_best": true,
+    "save_last": true
+  }
+}

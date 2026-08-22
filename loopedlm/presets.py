@@ -239,6 +239,18 @@ add("Z2_dropeF1_adapter_T32", {"n_loops": 32, "depth_cond": "depth_rope",
 add("Z2_dropeF1_rel_T48", {"n_loops": 48, "depth_cond": "depth_rope",
                            "depth_rope_frac": 1.0, "inject_input": "add_relative"})
 
+# --- Z3. the last push: every zero-param symmetry breaker at once ------------
+# Leaders at 25M: drope+rel 4.0807, rotate transport alone 4.0998 (both zero
+# parameters).  Conjugation (drope) varies the effective operator per step;
+# rotational transport makes repetition self-cancelling; relative injection fixes
+# the input share.  They act at three different points, so the triple may compose.
+add("Z3_all_T32", {"n_loops": 32, "depth_cond": "depth_rope", "depth_rope_frac": 1.0,
+                   "transport": "rotate", "inject_input": "add_relative"})
+add("Z3_all_T48", {"n_loops": 48, "depth_cond": "depth_rope", "depth_rope_frac": 1.0,
+                   "transport": "rotate", "inject_input": "add_relative"})
+add("Z3_rot_rel_T32", {"n_loops": 32, "transport": "rotate",
+                       "inject_input": "add_relative"})
+
 # --- P. the depth-RoPE frontier ---------------------------------------------
 # First mechanism to beat the naive optimum: at T=16, rotating a fraction of the
 # channels by a step-dependent angle gives 4.1612 at frac=0.25 and 4.1405 at

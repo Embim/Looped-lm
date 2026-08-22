@@ -1,0 +1,201 @@
+{
+  "event": "final",
+  "run": "A_depth8",
+  "machine": {
+    "gpu": "NVIDIA A100 80GB PCIe",
+    "torch": "2.8.0+cu128",
+    "compiled": true,
+    "attn_gqa_mode": "repeat"
+  },
+  "params": 9440513,
+  "params_non_emb": 5246209,
+  "train_tokens": 24985600,
+  "train_tokens_planned": 24985600,
+  "wall_seconds": 192.6,
+  "fwd_flops_per_token": 100663296.0,
+  "train_flops_est": 7545398545612800.0,
+  "best_periodic": {
+    "val_loss": 4.20636224355854,
+    "val_ppl": 67.11195825732523,
+    "val_bpb": 1.6132800089761192,
+    "step": 1524
+  },
+  "final": {
+    "n_loops": 8,
+    "val_loss": 4.202826684615651,
+    "val_ppl": 66.87509893491345,
+    "val_bpb": 1.6119240043733645,
+    "eval_tokens": 3997696,
+    "per_step_loss": [
+      27.386785499385148,
+      8.321597425664057,
+      5.646406713079234,
+      4.80674108325458,
+      4.486786111456449,
+      4.333490670704451,
+      4.253958827159444,
+      4.215579498986729,
+      4.202826684615651
+    ],
+    "per_step_ppl": [
+      783303053360.6918,
+      4111.722936726051,
+      283.2717581663654,
+      122.33229642426109,
+      88.83547926332656,
+      76.20984628659889,
+      70.38349763972877,
+      67.7334059401536,
+      66.87509893491345
+    ],
+    "stats": {
+      "delta_rms": [
+        2.531943551829604,
+        1.667737649601014,
+        1.5445669581655597,
+        1.502995340550532,
+        1.4755137738634327,
+        1.4526497247766277,
+        1.4355016604798738,
+        1.4246892181576276
+      ],
+      "state_rms": [
+        2.6049086031366566,
+        3.6341759445237334,
+        4.756055697065885,
+        5.912268646427842,
+        7.090037599938815,
+        8.279204669545909,
+        9.474477365368703,
+        10.674544275784102
+      ],
+      "cos_prev": [
+        0.460517553276703,
+        0.8723011204942328,
+        0.9493583562921305,
+        0.9750855662783638,
+        0.9856840687208488,
+        0.9906893374978519,
+        0.993453534167321
+      ]
+    }
+  },
+  "depth_sweep": {
+    "1": {
+      "val_loss": 8.342639618232601,
+      "val_ppl": 4199.159302787524,
+      "val_bpb": 3.1996801366305125
+    },
+    "2": {
+      "val_loss": 5.65552466032935,
+      "val_ppl": 285.86642616168746,
+      "val_bpb": 2.169082058672634
+    },
+    "4": {
+      "val_loss": 4.491689431862753,
+      "val_ppl": 89.27213774495904,
+      "val_bpb": 1.7227124882195453
+    },
+    "8": {
+      "val_loss": 4.20636224355854,
+      "val_ppl": 67.11195825732523,
+      "val_bpb": 1.6132800089761192
+    },
+    "16": {
+      "val_loss": 4.436703369265697,
+      "val_ppl": 84.49593014728026,
+      "val_bpb": 1.7016235019592716
+    },
+    "32": {
+      "val_loss": 5.109401593442823,
+      "val_ppl": 165.57124630361,
+      "val_bpb": 1.959625674454188
+    },
+    "64": {
+      "val_loss": 5.948209602324689,
+      "val_ppl": 383.0668826732955,
+      "val_bpb": 2.281336481499032
+    }
+  },
+  "model": {
+    "vocab_size": 8192,
+    "max_seq_len": 512,
+    "d_model": 512,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "head_dim": 64,
+    "intermediate_size": 1280,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "attn_gqa_mode": "repeat",
+    "tie_embeddings": true,
+    "embed_norm": true,
+    "n_prelude": 0,
+    "n_core": 2,
+    "n_coda": 0,
+    "n_loops": 8,
+    "max_loops": 64,
+    "state_init": "embed",
+    "state_init_std": 0.4,
+    "inject_input": "add",
+    "update": "residual",
+    "update_alpha_init": -1.0,
+    "momentum": false,
+    "momentum_beta": 0.9,
+    "momentum_learn_beta": true,
+    "momentum_read": false,
+    "depth_cond": "none",
+    "depth_rope_frac": 0.25,
+    "depth_rope_theta": 1000.0,
+    "attn_window_schedule": "none",
+    "loop_memory": "none",
+    "depth_attn_dim": 64,
+    "readout": "last",
+    "noise_std": 0.0,
+    "noise_schedule": "const",
+    "loop_dropout": 0.0,
+    "loop_sampling": "fixed",
+    "loop_min": 1,
+    "bptt_last_k": 0,
+    "grad_ckpt": true,
+    "deep_supervision": "none",
+    "deep_sup_k": 2,
+    "deep_sup_weight": 0.3,
+    "deep_sup_pos_frac": 0.25,
+    "deep_sup_detach_teacher": false,
+    "halting": "none",
+    "halting_weight": 0.01,
+    "halting_target_loops": 8.0,
+    "decorr_weight": 0.0,
+    "init_residual_scale": "one"
+  },
+  "train": {
+    "run_name": "A_depth8",
+    "out_dir": "/root/runs",
+    "data_dir": "/root/data/tok8192",
+    "total_tokens": 25000000,
+    "seq_len": 512,
+    "micro_batch": 32,
+    "grad_accum": 1,
+    "lr": 0.0015,
+    "min_lr_frac": 0.05,
+    "warmup_frac": 0.03,
+    "schedule": "cosine",
+    "wsd_decay_frac": 0.2,
+    "weight_decay": 0.1,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "grad_clip": 1.0,
+    "lr_scale_with_loops": "none",
+    "param_budget": 10000000,
+    "seed": 1337,
+    "dtype": "bfloat16",
+    "compile": true,
+    "eval_every": 250,
+    "eval_tokens": 2000000,
+    "final_eval_tokens": 4000000,
+    "log_every": 25,
+    "save_best": true,
+    "save_last": true
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "event": "final",
+  "run": "A_depth2",
+  "machine": {
+    "gpu": "NVIDIA A100 80GB PCIe",
+    "torch": "2.8.0+cu128",
+    "compiled": true,
+    "attn_gqa_mode": "repeat"
+  },
+  "params": 9440513,
+  "params_non_emb": 5246209,
+  "train_tokens": 24985600,
+  "train_tokens_planned": 24985600,
+  "wall_seconds": 89.4,
+  "fwd_flops_per_token": 31457280.0,
+  "train_flops_est": 2357937045504000.0,
+  "best_periodic": {
+    "val_loss": 4.37697961682179,
+    "val_ppl": 79.5972557554332,
+    "val_bpb": 1.6787174538588394,
+    "step": 1524
+  },
+  "final": {
+    "n_loops": 2,
+    "val_loss": 4.370881881870207,
+    "val_ppl": 79.11336959108702,
+    "val_bpb": 1.6763787694261119,
+    "eval_tokens": 3997696,
+    "per_step_loss": [
+      25.838962656552674,
+      4.99908504525169,
+      4.370881881870208
+    ],
+    "per_step_ppl": [
+      166616842424.21344,
+      148.27742988046091,
+      79.11336959108709
+    ],
+    "stats": {
+      "delta_rms": [
+        3.0783017658796465,
+        2.6077129977648377
+      ],
+      "state_rms": [
+        3.0925621849591614,
+        4.802512419028361
+      ],
+      "cos_prev": [
+        0.39505013408230955
+      ]
+    }
+  },
+  "depth_sweep": {
+    "1": {
+      "val_loss": 5.009862915414279,
+      "val_ppl": 149.88418792884835,
+      "val_bpb": 1.9214492763968707
+    },
+    "2": {
+      "val_loss": 4.37697961682179,
+      "val_ppl": 79.5972557554332,
+      "val_bpb": 1.6787174538588394
+    },
+    "4": {
+      "val_loss": 4.850742805199545,
+      "val_ppl": 127.83531132151664,
+      "val_bpb": 1.8604214147977858
+    },
+    "8": {
+      "val_loss": 6.127389602973813,
+      "val_ppl": 458.2384138698659,
+      "val_bpb": 2.3500579791537395
+    },
+    "16": {
+      "val_loss": 7.210594482109195,
+      "val_ppl": 1353.6967767323952,
+      "val_bpb": 2.7655031253273905
+    },
+    "32": {
+      "val_loss": 7.8720474047739,
+      "val_ppl": 2622.9302944573496,
+      "val_bpb": 3.019192350179084
+    },
+    "64": {
+      "val_loss": 8.268128297368033,
+      "val_ppl": 3897.646924628956,
+      "val_bpb": 3.1711025635559884
+    }
+  },
+  "model": {
+    "vocab_size": 8192,
+    "max_seq_len": 512,
+    "d_model": 512,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "head_dim": 64,
+    "intermediate_size": 1280,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "attn_gqa_mode": "repeat",
+    "tie_embeddings": true,
+    "embed_norm": true,
+    "n_prelude": 0,
+    "n_core": 2,
+    "n_coda": 0,
+    "n_loops": 2,
+    "max_loops": 64,
+    "state_init": "embed",
+    "state_init_std": 0.4,
+    "inject_input": "add",
+    "update": "residual",
+    "update_alpha_init": -1.0,
+    "momentum": false,
+    "momentum_beta": 0.9,
+    "momentum_learn_beta": true,
+    "momentum_read": false,
+    "depth_cond": "none",
+    "depth_rope_frac": 0.25,
+    "depth_rope_theta": 1000.0,
+    "attn_window_schedule": "none",
+    "loop_memory": "none",
+    "depth_attn_dim": 64,
+    "readout": "last",
+    "noise_std": 0.0,
+    "noise_schedule": "const",
+    "loop_dropout": 0.0,
+    "loop_sampling": "fixed",
+    "loop_min": 1,
+    "bptt_last_k": 0,
+    "grad_ckpt": true,
+    "deep_supervision": "none",
+    "deep_sup_k": 2,
+    "deep_sup_weight": 0.3,
+    "deep_sup_pos_frac": 0.25,
+    "deep_sup_detach_teacher": false,
+    "halting": "none",
+    "halting_weight": 0.01,
+    "halting_target_loops": 8.0,
+    "decorr_weight": 0.0,
+    "init_residual_scale": "one"
+  },
+  "train": {
+    "run_name": "A_depth2",
+    "out_dir": "/root/runs",
+    "data_dir": "/root/data/tok8192",
+    "total_tokens": 25000000,
+    "seq_len": 512,
+    "micro_batch": 32,
+    "grad_accum": 1,
+    "lr": 0.0015,
+    "min_lr_frac": 0.05,
+    "warmup_frac": 0.03,
+    "schedule": "cosine",
+    "wsd_decay_frac": 0.2,
+    "weight_decay": 0.1,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "grad_clip": 1.0,
+    "lr_scale_with_loops": "none",
+    "param_budget": 10000000,
+    "seed": 1337,
+    "dtype": "bfloat16",
+    "compile": true,
+    "eval_every": 250,
+    "eval_tokens": 2000000,
+    "final_eval_tokens": 4000000,
+    "log_every": 25,
+    "save_best": true,
+    "save_last": true
+  }
+}

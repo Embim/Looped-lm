@@ -1,0 +1,164 @@
+{
+  "event": "final",
+  "run": "A_ref_unshared16",
+  "machine": {
+    "gpu": "NVIDIA A100 80GB PCIe",
+    "torch": "2.8.0+cu128",
+    "compiled": true,
+    "attn_gqa_mode": "repeat"
+  },
+  "params": 46156801,
+  "params_non_emb": 41962497,
+  "train_tokens": 24985600,
+  "train_tokens_planned": 24985600,
+  "wall_seconds": 397.6,
+  "fwd_flops_per_token": 100663296.0,
+  "train_flops_est": 7545398545612800.0,
+  "best_periodic": {
+    "val_loss": 4.081031154413692,
+    "val_ppl": 59.206489417059124,
+    "val_bpb": 1.5652113622659554,
+    "step": 1524
+  },
+  "final": {
+    "n_loops": 1,
+    "val_loss": 4.078369525612378,
+    "val_ppl": 59.04911325097803,
+    "val_bpb": 1.5641905389778399,
+    "eval_tokens": 3997696,
+    "per_step_loss": [
+      25.369425312417455,
+      4.078369525612378
+    ],
+    "per_step_ppl": [
+      104184094683.05002,
+      59.04911325097803
+    ],
+    "stats": {
+      "delta_rms": [
+        10.096040987577595
+      ],
+      "state_rms": [
+        10.152459355651356
+      ]
+    }
+  },
+  "depth_sweep": {
+    "1": {
+      "val_loss": 4.081031154413692,
+      "val_ppl": 59.206489417059124,
+      "val_bpb": 1.5652113622659554
+    },
+    "2": {
+      "val_loss": 4.421673149359031,
+      "val_ppl": 83.23543423089096,
+      "val_bpb": 1.6958589120590386
+    },
+    "4": {
+      "val_loss": 5.551630145213643,
+      "val_ppl": 257.6572324502225,
+      "val_bpb": 2.129235052025712
+    },
+    "8": {
+      "val_loss": 6.753613815932978,
+      "val_ppl": 857.1507572747773,
+      "val_bpb": 2.5902358205773877
+    },
+    "16": {
+      "val_loss": 7.544687216399146,
+      "val_ppl": 1890.6712739533534,
+      "val_bpb": 2.8936388155427375
+    },
+    "32": {
+      "val_loss": 8.01190496272728,
+      "val_ppl": 3016.6582643609804,
+      "val_bpb": 3.072832381466434
+    },
+    "64": {
+      "val_loss": 8.294908124892437,
+      "val_ppl": 4003.4354135757994,
+      "val_bpb": 3.1813735192862302
+    }
+  },
+  "model": {
+    "vocab_size": 8192,
+    "max_seq_len": 512,
+    "d_model": 512,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "head_dim": 64,
+    "intermediate_size": 1280,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "attn_gqa_mode": "repeat",
+    "tie_embeddings": true,
+    "embed_norm": true,
+    "n_prelude": 0,
+    "n_core": 16,
+    "n_coda": 0,
+    "n_loops": 1,
+    "max_loops": 64,
+    "state_init": "embed",
+    "state_init_std": 0.4,
+    "inject_input": "add",
+    "update": "residual",
+    "update_alpha_init": -1.0,
+    "momentum": false,
+    "momentum_beta": 0.9,
+    "momentum_learn_beta": true,
+    "momentum_read": false,
+    "depth_cond": "none",
+    "depth_rope_frac": 0.25,
+    "depth_rope_theta": 1000.0,
+    "attn_window_schedule": "none",
+    "loop_memory": "none",
+    "depth_attn_dim": 64,
+    "readout": "last",
+    "noise_std": 0.0,
+    "noise_schedule": "const",
+    "loop_dropout": 0.0,
+    "loop_sampling": "fixed",
+    "loop_min": 1,
+    "bptt_last_k": 0,
+    "grad_ckpt": true,
+    "deep_supervision": "none",
+    "deep_sup_k": 2,
+    "deep_sup_weight": 0.3,
+    "deep_sup_pos_frac": 0.25,
+    "deep_sup_detach_teacher": false,
+    "halting": "none",
+    "halting_weight": 0.01,
+    "halting_target_loops": 8.0,
+    "decorr_weight": 0.0,
+    "init_residual_scale": "one"
+  },
+  "train": {
+    "run_name": "A_ref_unshared16",
+    "out_dir": "/root/runs",
+    "data_dir": "/root/data/tok8192",
+    "total_tokens": 25000000,
+    "seq_len": 512,
+    "micro_batch": 32,
+    "grad_accum": 1,
+    "lr": 0.0015,
+    "min_lr_frac": 0.05,
+    "warmup_frac": 0.03,
+    "schedule": "cosine",
+    "wsd_decay_frac": 0.2,
+    "weight_decay": 0.1,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "grad_clip": 1.0,
+    "lr_scale_with_loops": "none",
+    "param_budget": 60000000,
+    "seed": 1337,
+    "dtype": "bfloat16",
+    "compile": true,
+    "eval_every": 250,
+    "eval_tokens": 2000000,
+    "final_eval_tokens": 4000000,
+    "log_every": 25,
+    "save_best": true,
+    "save_last": true
+  }
+}

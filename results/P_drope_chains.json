@@ -1,0 +1,225 @@
+{
+  "event": "final",
+  "run": "P_drope_chains",
+  "machine": {
+    "gpu": "NVIDIA A100 80GB PCIe",
+    "torch": "2.8.0+cu128",
+    "compiled": true,
+    "attn_gqa_mode": "repeat",
+    "concurrency": 9
+  },
+  "params": 9442561,
+  "params_non_emb": 5248257,
+  "train_tokens": 24985600,
+  "train_tokens_planned": 24985600,
+  "wall_seconds": 10923.8,
+  "fwd_flops_per_token": 377487360.0,
+  "train_flops_est": 2.8295244546048e+16,
+  "best_periodic": {
+    "val_loss": 4.1722115004648925,
+    "val_ppl": 64.85872872958859,
+    "val_bpb": 1.6001820616443052,
+    "step": 1524
+  },
+  "final": {
+    "n_loops": 8,
+    "val_loss": 4.169643016135106,
+    "val_ppl": 64.69235385828782,
+    "val_bpb": 1.5991969623631013,
+    "eval_tokens": 3997696,
+    "per_step_loss": [
+      25.0287654907977,
+      8.140844493615823,
+      6.395456032674821,
+      5.700626224767967,
+      5.109592949757811,
+      4.621709100535659,
+      4.34063498993389,
+      4.2316084484585,
+      4.20699431173137
+    ],
+    "per_step_ppl": [
+      74106233668.98846,
+      3431.814790281005,
+      599.1164776243346,
+      299.0546177496585,
+      165.602932438745,
+      101.66764395199341,
+      76.75626332161119,
+      68.82784923708313,
+      67.15439099893604
+    ],
+    "stats": {
+      "delta_rms": [
+        2.2638349366969748,
+        1.4187312878546168,
+        1.3173573407970491,
+        1.3318656253032997,
+        1.4330962407784384,
+        1.5990973198023,
+        1.6849790928793735,
+        1.614002540463307
+      ],
+      "state_rms": [
+        2.392222918447901,
+        3.3754166902088727,
+        4.290944730649229,
+        5.192834858034478,
+        6.13605465849892,
+        7.171813253496514,
+        8.284127174830827,
+        9.382670758200474
+      ],
+      "cos_prev": [
+        0.6125634913561774,
+        0.8343190560575391,
+        0.8781891782752803,
+        0.8930804468080645,
+        0.9137416445329541,
+        0.9334720097115783,
+        0.9357465654611588
+      ],
+      "cos_prev_raw": [
+        0.6125634913561774,
+        0.8343190560575391,
+        0.8781891782752803,
+        0.8930804468080645,
+        0.9137416445329541,
+        0.9334720097115783,
+        0.9357465654611588
+      ],
+      "step_rms": [
+        2.2638349366969748,
+        1.4187312878546168,
+        1.3173573407970491,
+        1.3318656253032997,
+        1.4330962407784384,
+        1.5990973198023,
+        1.6849790928793735,
+        1.614002540463307
+      ]
+    }
+  },
+  "depth_sweep": {
+    "1": {
+      "val_loss": 8.362637668359476,
+      "val_ppl": 4283.979594464824,
+      "val_bpb": 3.2073500548686753
+    },
+    "2": {
+      "val_loss": 6.386698840094394,
+      "val_ppl": 593.8928049881886,
+      "val_bpb": 2.449511707617119
+    },
+    "4": {
+      "val_loss": 5.045565386287501,
+      "val_ppl": 155.33209701384132,
+      "val_bpb": 1.9351423630108506
+    },
+    "8": {
+      "val_loss": 4.1722115004648925,
+      "val_ppl": 64.85872872958859,
+      "val_bpb": 1.6001820616443052
+    },
+    "16": {
+      "val_loss": 4.574732854718068,
+      "val_ppl": 97.0021220160352,
+      "val_bpb": 1.7545624065604086
+    },
+    "32": {
+      "val_loss": 5.4947218855873485,
+      "val_ppl": 243.40382263527377,
+      "val_bpb": 2.1074088391879293
+    },
+    "64": {
+      "val_loss": 6.385843359056066,
+      "val_ppl": 593.3849582123376,
+      "val_bpb": 2.449183602148003
+    }
+  },
+  "model": {
+    "vocab_size": 8192,
+    "max_seq_len": 512,
+    "d_model": 512,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "head_dim": 64,
+    "intermediate_size": 1280,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "attn_gqa_mode": "repeat",
+    "tie_embeddings": true,
+    "embed_norm": true,
+    "n_prelude": 0,
+    "n_core": 2,
+    "n_coda": 0,
+    "n_loops": 8,
+    "max_loops": 64,
+    "state_init": "embed",
+    "state_init_std": 0.4,
+    "inject_input": "add",
+    "update": "residual",
+    "update_alpha_init": -1.0,
+    "curvature": 1.0,
+    "momentum": false,
+    "momentum_beta": 0.9,
+    "momentum_learn_beta": true,
+    "momentum_read": false,
+    "depth_cond": "depth_rope",
+    "depth_rope_frac": 0.5,
+    "depth_rope_theta": 1000.0,
+    "attn_window_schedule": "none",
+    "loop_memory": "none",
+    "depth_attn_dim": 64,
+    "n_chains": 4,
+    "chain_combine": "mean",
+    "chain_init_noise": 0.5,
+    "readout": "last",
+    "noise_std": 0.0,
+    "noise_schedule": "const",
+    "loop_dropout": 0.0,
+    "loop_sampling": "fixed",
+    "loop_min": 1,
+    "bptt_last_k": 0,
+    "grad_ckpt": true,
+    "deep_supervision": "none",
+    "deep_sup_k": 2,
+    "deep_sup_weight": 0.3,
+    "deep_sup_pos_frac": 0.25,
+    "deep_sup_detach_teacher": false,
+    "halting": "none",
+    "halting_weight": 0.01,
+    "halting_target_loops": 8.0,
+    "decorr_weight": 0.0,
+    "init_residual_scale": "one"
+  },
+  "train": {
+    "run_name": "P_drope_chains",
+    "out_dir": "/root/runs",
+    "data_dir": "/root/data/tok8192",
+    "total_tokens": 25000000,
+    "seq_len": 512,
+    "micro_batch": 32,
+    "grad_accum": 1,
+    "lr": 0.0015,
+    "min_lr_frac": 0.05,
+    "warmup_frac": 0.03,
+    "schedule": "cosine",
+    "wsd_decay_frac": 0.2,
+    "weight_decay": 0.1,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "grad_clip": 1.0,
+    "lr_scale_with_loops": "none",
+    "param_budget": 10000000,
+    "seed": 1337,
+    "dtype": "bfloat16",
+    "compile": true,
+    "eval_every": 250,
+    "eval_tokens": 2000000,
+    "final_eval_tokens": 4000000,
+    "log_every": 25,
+    "save_best": true,
+    "save_last": false
+  }
+}

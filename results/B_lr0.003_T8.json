@@ -1,0 +1,201 @@
+{
+  "event": "final",
+  "run": "B_lr0.003_T8",
+  "machine": {
+    "gpu": "NVIDIA A100 80GB PCIe",
+    "torch": "2.8.0+cu128",
+    "compiled": true,
+    "attn_gqa_mode": "repeat"
+  },
+  "params": 9440513,
+  "params_non_emb": 5246209,
+  "train_tokens": 24985600,
+  "train_tokens_planned": 24985600,
+  "wall_seconds": 192.3,
+  "fwd_flops_per_token": 100663296.0,
+  "train_flops_est": 7545398545612800.0,
+  "best_periodic": {
+    "val_loss": 4.268777219975581,
+    "val_ppl": 71.43423383933573,
+    "val_bpb": 1.6372182310986967,
+    "step": 1524
+  },
+  "final": {
+    "n_loops": 8,
+    "val_loss": 4.265185202731461,
+    "val_ppl": 71.1781011315138,
+    "val_bpb": 1.6358405728571341,
+    "eval_tokens": 3997696,
+    "per_step_loss": [
+      29.21491602600598,
+      5.735806660573991,
+      5.128230427132278,
+      4.730086553292197,
+      4.499165044456232,
+      4.372261467527171,
+      4.305722156509025,
+      4.274549116853808,
+      4.265185202731461
+    ],
+    "per_step_ppl": [
+      4873902301037.108,
+      309.7627433971833,
+      168.71829441168893,
+      113.30536887695999,
+      89.94200236673292,
+      79.22258858220312,
+      74.12272433747542,
+      71.84773707165883,
+      71.1781011315138
+    ],
+    "stats": {
+      "delta_rms": [
+        23.856679822577807,
+        5.023270927491735,
+        5.012462754718593,
+        5.003689148386971,
+        4.932759369005923,
+        4.831209667393418,
+        4.730821875275159,
+        4.646612220123166
+      ],
+      "state_rms": [
+        23.884783877701057,
+        24.840883114298837,
+        26.8278787566013,
+        29.53425904571033,
+        32.677943948839534,
+        36.06347249765865,
+        39.57573956348857,
+        43.15327624023938
+      ],
+      "cos_prev": [
+        0.1409584676510975,
+        0.8998802360452589,
+        0.952632580624252,
+        0.9746558426833544,
+        0.9840991448183529,
+        0.9890080871152096,
+        0.9920192910510985
+      ]
+    }
+  },
+  "depth_sweep": {
+    "1": {
+      "val_loss": 5.745662575862447,
+      "val_ppl": 312.8308333369885,
+      "val_bpb": 2.2036529512302137
+    },
+    "2": {
+      "val_loss": 5.136971121928731,
+      "val_ppl": 170.1994733661804,
+      "val_bpb": 1.9701995068033453
+    },
+    "4": {
+      "val_loss": 4.504545200066488,
+      "val_ppl": 90.42720840696342,
+      "val_bpb": 1.7276431034738253
+    },
+    "8": {
+      "val_loss": 4.268777219975581,
+      "val_ppl": 71.43423383933573,
+      "val_bpb": 1.6372182310986967
+    },
+    "16": {
+      "val_loss": 4.480735184716397,
+      "val_ppl": 88.29956530957239,
+      "val_bpb": 1.718511169618975
+    },
+    "32": {
+      "val_loss": 5.14829604742957,
+      "val_ppl": 172.13792541706792,
+      "val_bpb": 1.9745429928979215
+    },
+    "64": {
+      "val_loss": 6.058033446796605,
+      "val_ppl": 427.533841563865,
+      "val_bpb": 2.32345758342428
+    }
+  },
+  "model": {
+    "vocab_size": 8192,
+    "max_seq_len": 512,
+    "d_model": 512,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "head_dim": 64,
+    "intermediate_size": 1280,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "attn_gqa_mode": "repeat",
+    "tie_embeddings": true,
+    "embed_norm": true,
+    "n_prelude": 0,
+    "n_core": 2,
+    "n_coda": 0,
+    "n_loops": 8,
+    "max_loops": 64,
+    "state_init": "embed",
+    "state_init_std": 0.4,
+    "inject_input": "add",
+    "update": "residual",
+    "update_alpha_init": -1.0,
+    "momentum": false,
+    "momentum_beta": 0.9,
+    "momentum_learn_beta": true,
+    "momentum_read": false,
+    "depth_cond": "none",
+    "depth_rope_frac": 0.25,
+    "depth_rope_theta": 1000.0,
+    "attn_window_schedule": "none",
+    "loop_memory": "none",
+    "depth_attn_dim": 64,
+    "readout": "last",
+    "noise_std": 0.0,
+    "noise_schedule": "const",
+    "loop_dropout": 0.0,
+    "loop_sampling": "fixed",
+    "loop_min": 1,
+    "bptt_last_k": 0,
+    "grad_ckpt": true,
+    "deep_supervision": "none",
+    "deep_sup_k": 2,
+    "deep_sup_weight": 0.3,
+    "deep_sup_pos_frac": 0.25,
+    "deep_sup_detach_teacher": false,
+    "halting": "none",
+    "halting_weight": 0.01,
+    "halting_target_loops": 8.0,
+    "decorr_weight": 0.0,
+    "init_residual_scale": "one"
+  },
+  "train": {
+    "run_name": "B_lr0.003_T8",
+    "out_dir": "/root/runs",
+    "data_dir": "/root/data/tok8192",
+    "total_tokens": 25000000,
+    "seq_len": 512,
+    "micro_batch": 32,
+    "grad_accum": 1,
+    "lr": 0.003,
+    "min_lr_frac": 0.05,
+    "warmup_frac": 0.03,
+    "schedule": "cosine",
+    "wsd_decay_frac": 0.2,
+    "weight_decay": 0.1,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "grad_clip": 1.0,
+    "lr_scale_with_loops": "none",
+    "param_budget": 10000000,
+    "seed": 1337,
+    "dtype": "bfloat16",
+    "compile": true,
+    "eval_every": 250,
+    "eval_tokens": 2000000,
+    "final_eval_tokens": 4000000,
+    "log_every": 25,
+    "save_best": true,
+    "save_last": true
+  }
+}

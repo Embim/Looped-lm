@@ -1,0 +1,181 @@
+{
+  "event": "final",
+  "run": "A_depth4",
+  "machine": {
+    "gpu": "NVIDIA A100 80GB PCIe",
+    "torch": "2.8.0+cu128",
+    "compiled": true,
+    "attn_gqa_mode": "repeat"
+  },
+  "params": 9440513,
+  "params_non_emb": 5246209,
+  "train_tokens": 24985600,
+  "train_tokens_planned": 24985600,
+  "wall_seconds": 123.1,
+  "fwd_flops_per_token": 54525952.0,
+  "train_flops_est": 4087090878873600.0,
+  "best_periodic": {
+    "val_loss": 4.263498054176081,
+    "val_ppl": 71.05811434724151,
+    "val_bpb": 1.6351934951973972,
+    "step": 1524
+  },
+  "final": {
+    "n_loops": 4,
+    "val_loss": 4.2599976619736095,
+    "val_ppl": 70.80981789886008,
+    "val_bpb": 1.6338509782107846,
+    "eval_tokens": 3997696,
+    "per_step_loss": [
+      26.809684346933835,
+      6.029568920370008,
+      4.655800852619234,
+      4.331710105059577,
+      4.2599976619736095
+    ],
+    "per_step_ppl": [
+      439843292465.64667,
+      415.5358617214768,
+      105.19343070872435,
+      76.07427038921172,
+      70.80981789886008
+    ],
+    "stats": {
+      "delta_rms": [
+        2.722180724143982,
+        1.8621963389584275,
+        1.7762253660647596,
+        1.7533232442668227
+      ],
+      "state_rms": [
+        2.766827185622981,
+        3.9254318153271908,
+        5.230102249833404,
+        6.599206261947507
+      ],
+      "cos_prev": [
+        0.4261198713154089,
+        0.8609947024798784,
+        0.9417542177634161
+      ]
+    }
+  },
+  "depth_sweep": {
+    "1": {
+      "val_loss": 6.046774606235692,
+      "val_ppl": 422.74730221130574,
+      "val_bpb": 2.319139443105056
+    },
+    "2": {
+      "val_loss": 4.66230806366342,
+      "val_ppl": 105.88017854607304,
+      "val_bpb": 1.7881504157932793
+    },
+    "4": {
+      "val_loss": 4.263498054176081,
+      "val_ppl": 71.05811434724151,
+      "val_bpb": 1.6351934951973972
+    },
+    "8": {
+      "val_loss": 4.586175664526517,
+      "val_ppl": 98.11847376863695,
+      "val_bpb": 1.7589511052129694
+    },
+    "16": {
+      "val_loss": 5.5254540013485265,
+      "val_ppl": 251.000266616544,
+      "val_bpb": 2.119195629083871
+    },
+    "32": {
+      "val_loss": 6.512463706438659,
+      "val_ppl": 673.4836412798525,
+      "val_bpb": 2.4977467223297625
+    },
+    "64": {
+      "val_loss": 7.190557683100466,
+      "val_ppl": 1326.8429572087664,
+      "val_bpb": 2.757818345602545
+    }
+  },
+  "model": {
+    "vocab_size": 8192,
+    "max_seq_len": 512,
+    "d_model": 512,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "head_dim": 64,
+    "intermediate_size": 1280,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 10000.0,
+    "attn_gqa_mode": "repeat",
+    "tie_embeddings": true,
+    "embed_norm": true,
+    "n_prelude": 0,
+    "n_core": 2,
+    "n_coda": 0,
+    "n_loops": 4,
+    "max_loops": 64,
+    "state_init": "embed",
+    "state_init_std": 0.4,
+    "inject_input": "add",
+    "update": "residual",
+    "update_alpha_init": -1.0,
+    "momentum": false,
+    "momentum_beta": 0.9,
+    "momentum_learn_beta": true,
+    "momentum_read": false,
+    "depth_cond": "none",
+    "depth_rope_frac": 0.25,
+    "depth_rope_theta": 1000.0,
+    "attn_window_schedule": "none",
+    "loop_memory": "none",
+    "depth_attn_dim": 64,
+    "readout": "last",
+    "noise_std": 0.0,
+    "noise_schedule": "const",
+    "loop_dropout": 0.0,
+    "loop_sampling": "fixed",
+    "loop_min": 1,
+    "bptt_last_k": 0,
+    "grad_ckpt": true,
+    "deep_supervision": "none",
+    "deep_sup_k": 2,
+    "deep_sup_weight": 0.3,
+    "deep_sup_pos_frac": 0.25,
+    "deep_sup_detach_teacher": false,
+    "halting": "none",
+    "halting_weight": 0.01,
+    "halting_target_loops": 8.0,
+    "decorr_weight": 0.0,
+    "init_residual_scale": "one"
+  },
+  "train": {
+    "run_name": "A_depth4",
+    "out_dir": "/root/runs",
+    "data_dir": "/root/data/tok8192",
+    "total_tokens": 25000000,
+    "seq_len": 512,
+    "micro_batch": 32,
+    "grad_accum": 1,
+    "lr": 0.0015,
+    "min_lr_frac": 0.05,
+    "warmup_frac": 0.03,
+    "schedule": "cosine",
+    "wsd_decay_frac": 0.2,
+    "weight_decay": 0.1,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "grad_clip": 1.0,
+    "lr_scale_with_loops": "none",
+    "param_budget": 10000000,
+    "seed": 1337,
+    "dtype": "bfloat16",
+    "compile": true,
+    "eval_every": 250,
+    "eval_tokens": 2000000,
+    "final_eval_tokens": 4000000,
+    "log_every": 25,
+    "save_best": true,
+    "save_last": true
+  }
+}

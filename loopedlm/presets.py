@@ -223,6 +223,22 @@ add("Z_drope_rel_uniform", {"loop_sampling": "uniform", "loop_min": 1, "n_loops"
                             "depth_cond": "depth_rope", "depth_rope_frac": 0.5,
                             "inject_input": "add_relative"})
 
+# --- Z2. the frontier after the breakthrough --------------------------------
+# Z_drope_rel_T32 = 4.0807: depth now pays monotonically to T=32 and matches the
+# 46M-param unshared reference at 9.44M params.  Two directions are visibly not
+# exhausted: full-channel rotation beat half (P_drope_f1.0_T32 = 4.1094 vs 4.1339)
+# and the learned input adapter is the second-best in-budget run (4.0939).
+add("Z2_dropeF1_rel_T32", {"n_loops": 32, "depth_cond": "depth_rope",
+                           "depth_rope_frac": 1.0, "inject_input": "add_relative"})
+add("Z2_dropeF1_rel_T64", {"n_loops": 64, "depth_cond": "depth_rope",
+                           "depth_rope_frac": 1.0, "inject_input": "add_relative"})
+add("Z2_drope_adapter_T32", {"n_loops": 32, "depth_cond": "depth_rope",
+                             "depth_rope_frac": 0.5, "inject_input": "adapter"})
+add("Z2_dropeF1_adapter_T32", {"n_loops": 32, "depth_cond": "depth_rope",
+                               "depth_rope_frac": 1.0, "inject_input": "adapter"})
+add("Z2_dropeF1_rel_T48", {"n_loops": 48, "depth_cond": "depth_rope",
+                           "depth_rope_frac": 1.0, "inject_input": "add_relative"})
+
 # --- P. the depth-RoPE frontier ---------------------------------------------
 # First mechanism to beat the naive optimum: at T=16, rotating a fraction of the
 # channels by a step-dependent angle gives 4.1612 at frac=0.25 and 4.1405 at

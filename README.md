@@ -82,23 +82,42 @@ preset: `--set model.n_loops=32 --set model.update=normalized --set train.lr=2e-
   fixed parameters means more compute — the comparison is only meaningful with
   that column visible.
 
-## Notes on this machine
+## Hardware and provenance
 
-Measured on an RTX 5080 (sm_120) on Windows with torch 2.9.1+cu130. Three silent
-slow paths cost a factor of 3.0 in step time (928 → 311 ms at T=16), and are
-worth knowing about before trusting any throughput number here:
+All published results — every number in `results/` and the report's tables — were
+produced on a **rented A100 80GB (Linux, torch 2.8.0+cu128, Triton available)**
+with the shared block under `torch.compile` (2.5x measured). Every run's
+`summary.json` records the GPU, torch version, compile mode, attention path and
+the concurrency level it ran at, and the queue refuses to reuse a result produced
+on a different machine or compile mode: numbers from different builds never mix
+in one table. Concurrent workers raise aggregate throughput ~1.8x on this
+dispatch-bound model, so per-run `wall_seconds` is not comparable across runs —
+compare losses, not wall clocks.
+
+The project started on an RTX 5080 (sm_120) under Windows (torch 2.9.1+cu130),
+and the early profiling there is kept below because all three findings are
+*silent* fallbacks — no error, just a 3.0x slower step (928 → 311 ms at T=16) —
+and two of them do not transfer between builds, which is exactly why the
+attention path is a config switch and both machines were benchmarked rather than
+assumed:
 
 - PyTorch's Windows wheels ship **no FlashAttention kernels**; only mem-efficient
-  and math are available.
-- `scaled_dot_product_attention(..., enable_gqa=True)` therefore has no fused
-  kernel and silently selects the math backend, materialising the `[B,H,S,S]`
+  and math are available. `scaled_dot_product_attention(..., enable_gqa=True)`
+  therefore silently selects the math backend, materialising the `[B,H,S,S]`
   score matrix: **5254 µs against 290 µs** per layer versus expanding K/V
-  explicitly. GQA is a parameter-budget choice here, not a speed one.
+  explicitly. On the A100 build both FLASH and CUDNN implement GQA and
+  `enable_gqa=True` is fine (375 vs 384 ms) — the finding is build-specific.
 - `F.rms_norm` with a float32 gain on a bfloat16 input cannot dispatch to the
   fused implementation (**351 µs against 67 µs**); the gain is cast to the input
   dtype, exactly as autocast already does for every `Linear` weight.
-- Autocast's weight cache breaks gradient checkpointing when part of the loop runs
-  under `no_grad` (truncated BPTT), so training runs with `cache_enabled=False`.
-  With that fixed, `bptt_last_k=8` makes T=64 nearly three times cheaper.
-- `torch.compile` is unavailable (no Triton on Windows), and the `cudagraphs`
-  backend cannot capture a re-entrant loop.
+- Autocast's weight cache breaks gradient checkpointing when part of the loop
+  runs under `no_grad` (truncated BPTT), so training runs with
+  `cache_enabled=False`. With that fixed, `bptt_last_k=8` makes T=64 nearly
+  three times cheaper. This one applies on both machines.
+- `torch.compile` is unavailable on Windows (no Triton), and the `cudagraphs`
+  backend cannot capture a re-entrant loop. On Linux, compiling the shared block
+  once (not the whole model) serves all T iterations with no recompilation and
+  measured 2.52x.
+- Uncompiled, the A100 was *slower* than the 5080 (384 vs 311 ms/step): at this
+  size the loop is dispatch-bound, so clocks beat HBM. The value of the Linux box
+  was Triton, not the bigger card.

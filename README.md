@@ -7,6 +7,8 @@ looping help" — it does, cheaply — but *why the gains stop* after a handful 
 loops, and what makes a 32- or 64-loop model better than a 4-loop one.
 
 The report (in Russian) is [`report/report.md`](report/report.md).
+The final checkpoint is on the Hub: [Embim/looped-qwen3-9.4M-T32-fineweb](https://huggingface.co/Embim/looped-qwen3-9.4M-T32-fineweb) —
+**val loss 3.7219 / ppl 41.3 / bits-per-byte 1.4275** at T=32, 9.44M parameters, 100M FineWeb tokens.
 
 ## The short version
 

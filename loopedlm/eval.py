@@ -241,5 +241,6 @@ def full_report(ckpt: str | Path, data_dir: str, out_json: Optional[str | Path] 
     rep["trajectory"] = trajectory_stats(model, data_dir, seq, batch, Ta, device)
 
     if out_json:
-        Path(out_json).write_text(json.dumps(rep, indent=2))
+        # numpy scalars leak into the tables; default=float flattens them
+        Path(out_json).write_text(json.dumps(rep, indent=2, default=float))
     return rep

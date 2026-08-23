@@ -60,6 +60,19 @@ python scripts/collect_results.py && python scripts/plots.py
 `scripts/train.py --list` prints every preset. Ad-hoc configurations need no new
 preset: `--set model.n_loops=32 --set model.update=normalized --set train.lr=2e-3`.
 
+### Evaluating the published checkpoint
+
+```bash
+hf download Embim/looped-qwen3-9.4M-T32-fineweb --local-dir champion
+python scripts/eval.py --ckpt champion --loops 1,2,4,8,16,32,64
+```
+
+`--ckpt` accepts either a training checkpoint (`.pt`) or a Hub snapshot directory
+(`model.safetensors` + `model_config.json`); the depth sweep, difficulty strata
+and early-exit analysis all run on the published artefact directly. Validation
+data comes from `scripts/prepare_data.py` above and is byte-identical across
+machines (checksums in the report).
+
 ## Budgets and how they are enforced
 
 - **Parameters.** `vocab 8192 × d_model 512` tied embeddings cost 4.19M, leaving

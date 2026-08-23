@@ -33,6 +33,32 @@ from .model import LoopedQwen3
 
 
 def load_checkpoint(path: str | Path, device: str = "cuda", n_loops: Optional[int] = None):
+    """Load either a training checkpoint (.pt) or a published Hub snapshot.
+
+    A Hub snapshot is a directory (or its model.safetensors) holding
+    model.safetensors + model_config.json [+ train_config.json], which is what
+    `scripts/export_checkpoint.py` produces and what a reviewer downloads from
+    Hugging Face -- so evaluation works on the published artefact directly.
+    """
+    import json as _json
+    path = Path(path)
+    if path.is_dir() or path.suffix == ".safetensors":
+        from safetensors.torch import load_file
+        d = path if path.is_dir() else path.parent
+        mc = ModelConfig.from_dict(_json.loads((d / "model_config.json").read_text()))
+        if n_loops is not None:
+            mc.n_loops = n_loops
+        model = LoopedQwen3(mc).to(device)
+        sd = load_file(str(d / "model.safetensors"), device=str(device))
+        if mc.tie_embeddings and "lm_head.weight" not in sd:
+            sd["lm_head.weight"] = sd["embed_tokens.weight"]
+        model.load_state_dict(sd)
+        model.eval()
+        tc_file = d / "train_config.json"
+        ck = {"model_config": _json.loads(mc.to_json()),
+              "train_config": (_json.loads(tc_file.read_text()) if tc_file.exists()
+                               else {"seq_len": mc.max_seq_len})}
+        return model, mc, ck
     ck = torch.load(path, map_location=device, weights_only=False)
     mc = ModelConfig.from_dict(ck["model_config"])
     if n_loops is not None:
